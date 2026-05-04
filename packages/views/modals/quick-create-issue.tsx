@@ -16,7 +16,7 @@ import { Switch } from "@multica/ui/components/ui/switch";
 import { api, ApiError } from "@multica/core/api";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useCurrentWorkspace } from "@multica/core/paths";
-import { agentListOptions, memberListOptions } from "@multica/core/workspace/queries";
+import { agentListOptions } from "@multica/core/workspace/queries";
 import { useQuickCreateStore } from "@multica/core/issues/stores/quick-create-store";
 import { useIssueDraftStore } from "@multica/core/issues/stores/draft-store";
 import { useCreateModeStore } from "@multica/core/issues/stores/create-mode-store";
@@ -27,12 +27,11 @@ import {
   MIN_QUICK_CREATE_CLI_VERSION,
 } from "@multica/core/runtimes";
 import { useFileUpload } from "@multica/core/hooks/use-file-upload";
-import type { Agent, IssuePriority } from "@multica/core/types";
+import type { Agent } from "@multica/core/types";
 import { ActorAvatar } from "../common/actor-avatar";
 import { canAssignAgent } from "../issues/components/pickers/assignee-picker";
-import { PriorityPicker, DueDatePicker } from "../issues/components";
-import { ProjectPicker } from "../projects/components/project-picker";
 import { useAuthStore } from "@multica/core/auth";
+import { memberListOptions } from "@multica/core/workspace/queries";
 import {
   ContentEditor,
   type ContentEditorRef,
@@ -40,7 +39,6 @@ import {
   FileDropOverlay,
 } from "../editor";
 import { FileUploadButton } from "@multica/ui/components/common/file-upload-button";
-import { PillButton } from "../common/pill-button";
 
 // AgentCreatePanel — agent-mode body of the create-issue dialog. Renders
 // only the inner content; the surrounding `<Dialog>` AND `<DialogContent>`
@@ -82,6 +80,9 @@ export function AgentCreatePanel({
 
   const lastAgentId = useQuickCreateStore((s) => s.lastAgentId);
   const setLastAgentId = useQuickCreateStore((s) => s.setLastAgentId);
+  const promptDraft = useQuickCreateStore((s) => s.prompt);
+  const setPrompt = useQuickCreateStore((s) => s.setPrompt);
+  const clearPrompt = useQuickCreateStore((s) => s.clearPrompt);
   const keepOpen = useQuickCreateStore((s) => s.keepOpen);
   const setKeepOpen = useQuickCreateStore((s) => s.setKeepOpen);
   const setLastMode = useCreateModeStore((s) => s.setLastMode);
@@ -129,7 +130,7 @@ export function AgentCreatePanel({
   );
   const versionBlocked = versionCheck.state !== "ok";
 
-  const initialPrompt = (data?.prompt as string) || "";
+  const initialPrompt = (data?.prompt as string) || promptDraft;
   // The editor is uncontrolled — we read the latest markdown via the ref at
   // submit/switch time. `hasContent` mirrors emptiness so the Create button
   // can disable correctly without a controlled-input rerender on every keystroke.
@@ -139,9 +140,6 @@ export function AgentCreatePanel({
   const [justSent, setJustSent] = useState(false);
   const [sentCount, setSentCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [priority, setPriority] = useState<IssuePriority>("none");
-  const [dueDate, setDueDate] = useState<string | null>(null);
-  const [projectId, setProjectId] = useState<string | null>(null);
 
   // Image paste/drop support: route uploads through the same helper Advanced
   // uses, so users can paste screenshots straight into the prompt and the
@@ -169,14 +167,9 @@ export function AgentCreatePanel({
     setSubmitting(true);
     setError(null);
     try {
-      await api.quickCreateIssue({
-        agent_id: agentId,
-        prompt: md,
-        ...(priority !== "none" ? { priority } : {}),
-        ...(dueDate ? { due_date: dueDate } : {}),
-        ...(projectId ? { project_id: projectId } : {}),
-      });
+      await api.quickCreateIssue({ agent_id: agentId, prompt: md });
       setLastAgentId(agentId);
+      clearPrompt();
       setLastMode("agent");
       toast.success("Sent to agent — you'll get an inbox notification when it's done", {
         duration: 4000,
@@ -338,27 +331,6 @@ export function AgentCreatePanel({
           </div>
         )}
 
-        <div className="flex items-center gap-1.5 px-5 py-1.5 shrink-0 flex-wrap border-b">
-          <PriorityPicker
-            priority={priority}
-            onUpdate={(u) => u.priority && setPriority(u.priority)}
-            triggerRender={<PillButton />}
-            align="start"
-          />
-          <DueDatePicker
-            dueDate={dueDate}
-            onUpdate={(u) => setDueDate(u.due_date ?? null)}
-            triggerRender={<PillButton />}
-            align="start"
-          />
-          <ProjectPicker
-            projectId={projectId}
-            onUpdate={(u) => setProjectId(u.project_id ?? null)}
-            triggerRender={<PillButton />}
-            align="start"
-          />
-        </div>
-
         {/* Prompt — same rich editor Advanced uses, so paste/drop images,
             mentions, and formatting all work. The dropZone wrapper enables
             drag-and-drop file uploads alongside paste. */}
@@ -374,7 +346,10 @@ export function AgentCreatePanel({
             ref={editorRef}
             defaultValue={initialPrompt}
             placeholder='Tell the agent what to do, e.g. "let Bohan fix the inbox loading slowness in the Web project"'
-            onUpdate={(md) => setHasContent(md.trim().length > 0)}
+            onUpdate={(md) => {
+              setHasContent(md.trim().length > 0);
+              setPrompt(md);
+            }}
             onUploadFile={handleUploadFile}
             onSubmit={submit}
             debounceMs={150}
