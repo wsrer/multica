@@ -80,8 +80,8 @@ export function DaemonSettingsTab() {
     return window.daemonAPI.onStatusChange(setStatus);
   }, []);
 
-  const updatePref = useCallback(
-    async (key: keyof DaemonPrefs, value: boolean) => {
+  const updateBoolPref = useCallback(
+    async (key: "autoStart" | "autoStop", value: boolean) => {
       setSaving(true);
       const updated = await window.daemonAPI.setPrefs({ [key]: value });
       setPrefs(updated);
@@ -126,7 +126,7 @@ export function DaemonSettingsTab() {
         >
           <Switch
             checked={prefs.autoStart}
-            onCheckedChange={(checked) => updatePref("autoStart", checked)}
+            onCheckedChange={(checked) => updateBoolPref("autoStart", checked)}
             disabled={saving}
           />
         </SettingRow>
@@ -137,7 +137,7 @@ export function DaemonSettingsTab() {
         >
           <Switch
             checked={prefs.autoStop}
-            onCheckedChange={(checked) => updatePref("autoStop", checked)}
+            onCheckedChange={(checked) => updateBoolPref("autoStop", checked)}
             disabled={saving}
           />
         </SettingRow>
