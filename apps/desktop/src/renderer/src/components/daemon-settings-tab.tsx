@@ -197,19 +197,13 @@ export function DaemonSettingsTab() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Change repos storage location?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                <p>
-                  The daemon will store repos and task environments in:
-                </p>
-                <p className="font-mono text-xs bg-muted/50 px-2 py-1 rounded break-all">
-                  {confirmNewRoot}
-                </p>
-                <p>
-                  The daemon will be restarted to apply this change. Existing repos at the current
-                  location will not be moved automatically — copy them manually if needed.
-                </p>
-              </div>
+            <AlertDialogDescription>
+              The daemon will store repos and task environments in:{' '}
+              <span className="font-mono text-xs bg-muted/50 px-1.5 py-0.5 rounded break-all">
+                {confirmNewRoot}
+              </span>
+              . The daemon will be restarted to apply this change. Existing repos at the current
+              location will not be moved automatically — copy them manually if needed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
