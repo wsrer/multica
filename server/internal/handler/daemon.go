@@ -1015,6 +1015,9 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 	if task.IssueID.Valid {
 		if issue, err := h.Queries.GetIssue(r.Context(), task.IssueID); err == nil {
 			resp.WorkspaceID = uuidToString(issue.WorkspaceID)
+			if issue.ExecutionCwd.Valid {
+				resp.ExecutionCwd = issue.ExecutionCwd.String
+			}
 
 			var projectRepos []RepoData
 			if issue.ProjectID.Valid {

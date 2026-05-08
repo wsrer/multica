@@ -40,6 +40,7 @@ export interface Issue {
   project_id: string | null;
   position: number;
   due_date: string | null;
+  execution_cwd?: string | null;
   reactions?: IssueReaction[];
   labels?: Label[];
   created_at: string;
