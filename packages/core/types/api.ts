@@ -14,7 +14,6 @@ export interface CreateIssueRequest {
   project_id?: string;
   due_date?: string;
   attachment_ids?: string[];
-  execution_cwd?: string;
 }
 
 export interface UpdateIssueRequest {
@@ -28,7 +27,6 @@ export interface UpdateIssueRequest {
   due_date?: string | null;
   parent_issue_id?: string | null;
   project_id?: string | null;
-  execution_cwd?: string | null;
 }
 
 export interface ListIssuesParams {

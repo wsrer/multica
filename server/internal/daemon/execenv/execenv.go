@@ -37,7 +37,6 @@ type PrepareParams struct {
 	AgentName      string            // for git branch naming only
 	Provider       string            // agent provider (determines runtime config and skill injection paths)
 	CodexVersion   string            // detected Codex CLI version (only used when Provider == "codex")
-	ExecutionCWD   string            // absolute path override — when set, skip isolated env creation and use this as WorkDir
 	Task           TaskContextForEnv // context data for writing files
 }
 
@@ -101,29 +100,7 @@ func PredictRootDir(workspacesRoot, workspaceID, taskID string) string {
 // Prepare creates an isolated execution environment for a task.
 // The workdir starts empty (no repo checkouts). The agent checks out repos
 // on demand via `multica repo checkout <url>`.
-//
-// When params.ExecutionCWD is set, directory creation is skipped and the
-// specified path is used as WorkDir directly. Context files are still written
-// so the agent has issue metadata.
 func Prepare(params PrepareParams, logger *slog.Logger) (*Environment, error) {
-	// ExecutionCWD override: use the user-specified directory directly.
-	if params.ExecutionCWD != "" {
-		env := &Environment{
-			RootDir: "",
-			WorkDir: params.ExecutionCWD,
-			logger:  logger,
-		}
-
-		// Write context files into the specified directory so the agent
-		// can discover the issue, skills, and project resources.
-		if err := writeContextFiles(params.ExecutionCWD, params.Provider, params.Task); err != nil {
-			return nil, fmt.Errorf("execenv: write context files to %s: %w", params.ExecutionCWD, err)
-		}
-
-		logger.Info("execenv: using override cwd", "workdir", params.ExecutionCWD, "repos_available", len(params.Task.Repos))
-		return env, nil
-	}
-
 	if params.WorkspacesRoot == "" {
 		return nil, fmt.Errorf("execenv: workspaces root is required")
 	}

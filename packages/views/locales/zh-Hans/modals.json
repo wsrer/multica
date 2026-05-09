@@ -113,9 +113,6 @@
       "title": "添加子 issue",
       "description": "搜索一个 issue 设为子级"
     },
-    "execution_cwd_label": "工作目录",
-    "execution_cwd_placeholder": "默认：隔离工作空间（绝对路径）",
-    "browse": "浏览",
     "agent": {
       "created_by": "创建者",
       "select_agent_aria": "选择智能体",

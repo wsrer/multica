@@ -45,7 +45,6 @@ type IssueResponse struct {
 	UpdatedAt     string                  `json:"updated_at"`
 	Reactions     []IssueReactionResponse `json:"reactions,omitempty"`
 	Attachments   []AttachmentResponse    `json:"attachments,omitempty"`
-	ExecutionCwd *string `json:"execution_cwd,omitempty"`
 	// Labels are bulk-attached by list/detail endpoints so the client can render
 	// chips without an N+1 round-trip per row. Pointer + omitempty so paths that
 	// don't load labels (e.g. UpdateIssue, batch UpdateIssues, the issue:updated
@@ -76,7 +75,6 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 		DueDate:       timestampToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
-		ExecutionCwd:  textToPtr(i.ExecutionCwd),
 	}
 }
 
@@ -106,7 +104,6 @@ func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string) IssueRespons
 		DueDate:       timestampToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
-		ExecutionCwd:  textToPtr(i.ExecutionCwd),
 	}
 }
 
@@ -162,7 +159,6 @@ func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string) IssueRes
 		DueDate:       timestampToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
-		ExecutionCwd:  textToPtr(i.ExecutionCwd),
 	}
 }
 
@@ -1062,10 +1058,6 @@ type CreateIssueRequest struct {
 	ProjectID     *string  `json:"project_id"`
 	DueDate       *string  `json:"due_date"`
 	AttachmentIDs []string `json:"attachment_ids,omitempty"`
-	// ExecutionCwd overrides the default isolated workdir. When set, the daemon
-	// uses this absolute path as the agent's working directory instead of
-	// creating a new isolated environment.
-	ExecutionCwd *string `json:"execution_cwd,omitempty"`
 	// OriginType / OriginID stamp the new issue with its provenance so
 	// platform-internal flows can deterministically locate it later. Only
 	// trusted callers should set these — currently the daemon CLI passes
@@ -1170,11 +1162,6 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		dueDate = pgtype.Timestamptz{Time: t, Valid: true}
 	}
 
-	var executionCwd pgtype.Text
-	if req.ExecutionCwd != nil && *req.ExecutionCwd != "" {
-		executionCwd = pgtype.Text{String: *req.ExecutionCwd, Valid: true}
-	}
-
 	// Use a transaction to atomically increment the workspace issue counter
 	// and create the issue with the assigned number.
 	tx, err := h.TxStarter.Begin(r.Context())
@@ -1240,7 +1227,6 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 			ProjectID:     projectID,
 			OriginType:    originType,
 			OriginID:      originID,
-			ExecutionCwd:  executionCwd,
 		})
 	} else {
 		issue, err = qtx.CreateIssue(r.Context(), db.CreateIssueParams{
@@ -1258,7 +1244,6 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 			DueDate:       dueDate,
 			Number:        issueNumber,
 			ProjectID:     projectID,
-			ExecutionCwd:  executionCwd,
 		})
 	}
 	if err != nil {
@@ -1318,7 +1303,6 @@ type UpdateIssueRequest struct {
 	DueDate       *string  `json:"due_date"`
 	ParentIssueID *string  `json:"parent_issue_id"`
 	ProjectID     *string  `json:"project_id"`
-	ExecutionCwd  *string  `json:"execution_cwd"`
 }
 
 func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
@@ -1355,7 +1339,6 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		DueDate:       prevIssue.DueDate,
 		ParentIssueID: prevIssue.ParentIssueID,
 		ProjectID:     prevIssue.ProjectID,
-		ExecutionCwd:  prevIssue.ExecutionCwd,
 	}
 
 	// COALESCE fields — only set when explicitly provided
@@ -1403,13 +1386,6 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 			params.DueDate = pgtype.Timestamptz{Time: t, Valid: true}
 		} else {
 			params.DueDate = pgtype.Timestamptz{Valid: false} // explicit null = clear date
-		}
-	}
-	if _, ok := rawFields["execution_cwd"]; ok {
-		if req.ExecutionCwd != nil && *req.ExecutionCwd != "" {
-			params.ExecutionCwd = pgtype.Text{String: *req.ExecutionCwd, Valid: true}
-		} else {
-			params.ExecutionCwd = pgtype.Text{Valid: false} // explicit null = clear override
 		}
 	}
 	if _, ok := rawFields["parent_issue_id"]; ok {

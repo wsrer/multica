@@ -172,7 +172,6 @@ type AgentTaskResponse struct {
 	AutopilotDescription    string                `json:"autopilot_description,omitempty"`     // autopilot description used as task prompt
 	AutopilotSource         string                `json:"autopilot_source,omitempty"`          // manual, schedule, webhook, or api
 	AutopilotTriggerPayload json.RawMessage       `json:"autopilot_trigger_payload,omitempty"` // optional trigger payload for webhook/api runs
-	ExecutionCwd            string                `json:"execution_cwd,omitempty"`             // per-issue working directory override — when set, daemon uses this path as cwd instead of creating an isolated workdir
 	QuickCreatePrompt       string                `json:"quick_create_prompt,omitempty"`       // user's natural-language input for quick-create tasks
 	Kind                    string                `json:"kind"`                                // discriminator: "comment" | "autopilot" | "chat" | "quick_create" | "direct" — used by the activity row to label tasks that have no linked issue
 }

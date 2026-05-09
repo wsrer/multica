@@ -1644,26 +1644,21 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 	// can't reclaim artifacts inside them mid-execution. We mark both the
 	// predicted root for a fresh Prepare and the prior root for Reuse — they
 	// usually differ (Reuse keeps the original task's directory).
-	// When ExecutionCwd is set, there is no isolated env to protect — skip GC
-	// marking entirely.
-	if task.ExecutionCwd == "" {
-		predictedRoot := execenv.PredictRootDir(d.cfg.WorkspacesRoot, task.WorkspaceID, task.ID)
-		d.markActiveEnvRoot(predictedRoot)
-		defer d.unmarkActiveEnvRoot(predictedRoot)
-		if task.PriorWorkDir != "" {
-			priorRoot := filepath.Dir(task.PriorWorkDir)
-			if priorRoot != predictedRoot {
-				d.markActiveEnvRoot(priorRoot)
-				defer d.unmarkActiveEnvRoot(priorRoot)
-			}
+	predictedRoot := execenv.PredictRootDir(d.cfg.WorkspacesRoot, task.WorkspaceID, task.ID)
+	d.markActiveEnvRoot(predictedRoot)
+	defer d.unmarkActiveEnvRoot(predictedRoot)
+	if task.PriorWorkDir != "" {
+		priorRoot := filepath.Dir(task.PriorWorkDir)
+		if priorRoot != predictedRoot {
+			d.markActiveEnvRoot(priorRoot)
+			defer d.unmarkActiveEnvRoot(priorRoot)
 		}
 	}
 
 	// Try to reuse the workdir from a previous task on the same (agent, issue) pair.
-	// When ExecutionCwd is set, skip reuse — the user-specified directory is authoritative.
 	var env *execenv.Environment
 	codexVersion := d.agentVersion("codex")
-	if task.ExecutionCwd == "" && task.PriorWorkDir != "" {
+	if task.PriorWorkDir != "" {
 		env = execenv.Reuse(task.PriorWorkDir, provider, codexVersion, taskCtx, d.logger)
 	}
 	if env == nil {
@@ -1675,7 +1670,6 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 			AgentName:      agentName,
 			Provider:       provider,
 			CodexVersion:   codexVersion,
-			ExecutionCWD:   task.ExecutionCwd,
 			Task:           taskCtx,
 		}, d.logger)
 		if err != nil {
@@ -1684,17 +1678,14 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 	}
 	// Belt-and-suspenders: also mark whatever root we ended up with, in case
 	// future changes diverge from PredictRootDir.
-	if env.RootDir != "" && task.ExecutionCwd == "" {
+	if env.RootDir != predictedRoot && env.RootDir != "" {
 		d.markActiveEnvRoot(env.RootDir)
 		defer d.unmarkActiveEnvRoot(env.RootDir)
 	}
 
 	// Inject runtime-specific config (meta skill) so the agent discovers .agent_context/.
-	// Skip when using a user-specified cwd to avoid overwriting existing CLAUDE.md / AGENTS.md.
-	if task.ExecutionCwd == "" {
-		if err := execenv.InjectRuntimeConfig(env.WorkDir, provider, taskCtx); err != nil {
-			d.logger.Warn("execenv: inject runtime config failed (non-fatal)", "error", err)
-		}
+	if err := execenv.InjectRuntimeConfig(env.WorkDir, provider, taskCtx); err != nil {
+		d.logger.Warn("execenv: inject runtime config failed (non-fatal)", "error", err)
 	}
 	// NOTE: No cleanup — workdir is preserved for reuse by future tasks on
 	// the same (agent, issue) pair. The work_dir path is stored in DB on

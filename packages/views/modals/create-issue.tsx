@@ -114,7 +114,6 @@ export function ManualCreatePanel({
   // object, and we never need to hydrate from an ID the way we do for parent.
   const [childIssues, setChildIssues] = useState<Issue[]>([]);
   const [childPickerOpen, setChildPickerOpen] = useState(false);
-  const [executionCwd, setExecutionCwd] = useState("");
   // Fetch parent issue details for the chip (status/identifier/title).
   // List cache usually has it already, so this resolves synchronously.
   const wsId = useWorkspaceId();
@@ -156,7 +155,6 @@ export function ManualCreatePanel({
     setParentIssueId(undefined);
     setChildIssues([]);
     setAttachmentIds([]);
-    setExecutionCwd("");
     setDraft({
       title: "",
       description: "",
@@ -185,7 +183,6 @@ export function ManualCreatePanel({
         attachment_ids: attachmentIds.length > 0 ? attachmentIds : undefined,
         parent_issue_id: parentIssueId,
         project_id: projectId,
-        execution_cwd: executionCwd || undefined,
       });
 
       // Link queued children to the new parent. Deferred to after create
@@ -539,37 +536,6 @@ export function ManualCreatePanel({
                 );
               }}
             />
-
-            {/* Execution working directory override */}
-            <div className="border-t px-4 py-2.5 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {t(($) => $.create_issue.execution_cwd_label)}
-                </span>
-                <input
-                  type="text"
-                  value={executionCwd}
-                  onChange={(e) => setExecutionCwd(e.target.value)}
-                  placeholder={t(($) => $.create_issue.execution_cwd_placeholder)}
-                  className="flex-1 min-w-0 h-7 px-2 text-xs rounded-sm border bg-background text-foreground placeholder:text-muted-foreground/50"
-                />
-                {typeof window !== "undefined" && "daemonAPI" in window && (window as any).daemonAPI?.pickDirectory ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs shrink-0"
-                    onClick={async () => {
-                      const result = await (window as any).daemonAPI.pickDirectory();
-                      if (!result.canceled && result.path) {
-                        setExecutionCwd(result.path);
-                      }
-                    }}
-                  >
-                    {t(($) => $.create_issue.browse)}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
 
             {/* Footer */}
             <div className="flex flex-col gap-2 border-t px-4 py-3 shrink-0 sm:flex-row sm:items-center sm:justify-between">

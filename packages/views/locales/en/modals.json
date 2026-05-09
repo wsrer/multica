@@ -113,9 +113,6 @@
       "title": "Add sub-issue",
       "description": "Search for an issue to add as a sub-issue of the new issue"
     },
-    "execution_cwd_label": "Working directory",
-    "execution_cwd_placeholder": "Default: isolated workspace (absolute path)",
-    "browse": "Browse",
     "agent": {
       "created_by": "Created by",
       "select_agent_aria": "Select agent",
