@@ -77,7 +77,11 @@ func (b *hermesBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 	// the real cause (wrong model for the current provider, bad
 	// credentials, rate limit, …) in the daemon log.
 	providerErr := newACPProviderErrorSniffer("hermes")
-	cmd.Stderr = io.MultiWriter(newLogWriter(b.cfg.Logger, "[hermes:stderr] "), providerErr)
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("hermes stderr pipe: %w", err)
+	}
 
 	if err := cmd.Start(); err != nil {
 		cancel()
@@ -146,14 +150,26 @@ func (b *hermesBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		c.closeAllPending(fmt.Errorf("hermes process exited"))
 	}()
 
+	// Read stderr ourselves instead of assigning cmd.Stderr directly so the
+	// provider-error sniffer has definitely consumed all stderr before we
+	// decide the final task status.
+	stderrDone := make(chan struct{})
+	go func() {
+		defer close(stderrDone)
+		_, _ = io.Copy(io.MultiWriter(newLogWriter(b.cfg.Logger, "[hermes:stderr] "), providerErr), stderr)
+	}()
+
 	// Drive the ACP session lifecycle in a goroutine.
 	go func() {
+		processWaited := false
 		defer cancel()
 		defer close(msgCh)
 		defer close(resCh)
 		defer func() {
 			stdin.Close()
-			_ = cmd.Wait()
+			if !processWaited {
+				_ = cmd.Wait()
+			}
 		}()
 
 		startTime := time.Now()
@@ -305,8 +321,12 @@ func (b *hermesBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		stdin.Close()
 		cancel()
 
-		// Wait for the reader goroutine to finish so all output is accumulated.
+		// Wait for the reader goroutines to finish so all output and stderr
+		// provider-error details are accumulated before status promotion.
 		<-readerDone
+		<-stderrDone
+		_ = cmd.Wait()
+		processWaited = true
 
 		outputMu.Lock()
 		finalOutput := output.String()
