@@ -76,6 +76,7 @@ describe("markdownPaste — code block context", () => {
   let editor: Editor | null = null;
 
   afterEach(() => {
+    vi.restoreAllMocks();
     editor?.destroy();
     editor = null;
     document.body.innerHTML = "";
