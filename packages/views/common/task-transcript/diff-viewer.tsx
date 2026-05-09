@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
+import { useT } from "../../i18n";
 
 interface DiffViewerProps {
   /** Raw output text that may contain a unified diff */
@@ -51,6 +52,7 @@ function generateStructuredDiff(oldText: string, newText: string): DiffLine[] {
 }
 
 export function DiffViewer({ output, oldText, newText }: DiffViewerProps) {
+  const { t } = useT("agents");
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -81,7 +83,7 @@ export function DiffViewer({ output, oldText, newText }: DiffViewerProps) {
     <div className="overflow-hidden rounded">
       <div className="flex items-center justify-between bg-muted/60 px-3 py-1.5 border-b">
         <span className="text-[10px] text-muted-foreground">
-          {hasDiffMarkers ? "File changes" : "File content"}
+          {hasDiffMarkers ? t(($) => $.transcript.file_changes) : t(($) => $.transcript.file_content)}
         </span>
         <button
           type="button"
@@ -115,7 +117,7 @@ export function DiffViewer({ output, oldText, newText }: DiffViewerProps) {
             onClick={() => setExpanded(true)}
           >
             <ChevronDown className="size-3" />
-            Show all {hunkLines.length} lines
+            {t(($) => $.transcript.show_all_lines, { count: hunkLines.length })}
           </button>
         )}
         {expanded && hunkLines.length > 100 && (
@@ -125,7 +127,7 @@ export function DiffViewer({ output, oldText, newText }: DiffViewerProps) {
             onClick={() => setExpanded(false)}
           >
             <ChevronUp className="size-3" />
-            Collapse
+            {t(($) => $.transcript.collapse)}
           </button>
         )}
       </pre>
