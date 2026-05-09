@@ -298,6 +298,15 @@ func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
 			OwnerID:     ownerID,
 		})
 		if err != nil {
+			h.Analytics.Capture(analytics.RuntimeFailed(
+				uuidToString(ownerID),
+				req.WorkspaceID,
+				req.DaemonID,
+				provider,
+				"registration_failed",
+				"db_error",
+				true,
+			))
 			writeError(w, http.StatusInternalServerError, "failed to register runtime: "+err.Error())
 			return
 		}
@@ -319,15 +328,28 @@ func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
 			LegacyDaemonID: row.LegacyDaemonID,
 		}
 
+		// Inserted is false for normal daemon reconnects/upserts, so
+		// runtime_ready is a first-ready-per-runtime-row signal.
 		if row.Inserted {
 			h.Analytics.Capture(analytics.RuntimeRegistered(
 				uuidToString(ownerID),
 				req.WorkspaceID,
 				uuidToString(registered.ID),
+				req.DaemonID,
 				provider,
 				runtime.Version,
 				req.CLIVersion,
 			))
+			if registered.Status == "online" {
+				h.Analytics.Capture(analytics.RuntimeReady(
+					uuidToString(ownerID),
+					req.WorkspaceID,
+					uuidToString(registered.ID),
+					req.DaemonID,
+					provider,
+					0,
+				))
+			}
 		}
 
 		// Seamless migration from the previous hostname-derived identity. The
@@ -500,6 +522,13 @@ func (h *Handler) DaemonDeregister(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("deregister: failed to set offline", "runtime_id", rid, "error", err)
 			continue
 		}
+		h.Analytics.Capture(analytics.RuntimeOffline(
+			uuidToString(rt.OwnerID),
+			wsID,
+			uuidToString(rt.ID),
+			rt.DaemonID.String,
+			rt.Provider,
+		))
 
 		affectedWorkspaces[wsID] = true
 	}
@@ -1202,7 +1231,54 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 			hasQuickCreate = true
 			resp.QuickCreatePrompt = qc.Prompt
 			resp.WorkspaceID = qc.WorkspaceID
-			if ws, err := h.Queries.GetWorkspace(r.Context(), parseUUID(qc.WorkspaceID)); err == nil && ws.Repos != nil {
+
+			// When the user picked a project in the modal, surface its title
+			// and resources to the daemon so the agent has the same context
+			// it would for an issue-bound task: the prompt template can name
+			// the project, and `multica repo checkout` sees the project's
+			// github_repo resources instead of the workspace fallback.
+			var projectRepos []RepoData
+			if qc.ProjectID != "" {
+				projectUUID, err := util.ParseUUID(qc.ProjectID)
+				if err == nil {
+					resp.ProjectID = qc.ProjectID
+					if proj, err := h.Queries.GetProject(r.Context(), projectUUID); err == nil {
+						resp.ProjectTitle = proj.Title
+					}
+					if rows := h.listProjectResourcesForProject(r.Context(), projectUUID); len(rows) > 0 {
+						out := make([]ProjectResourceData, 0, len(rows))
+						for _, row := range rows {
+							label := ""
+							if row.Label.Valid {
+								label = row.Label.String
+							}
+							ref := json.RawMessage(row.ResourceRef)
+							if len(ref) == 0 {
+								ref = json.RawMessage("{}")
+							}
+							out = append(out, ProjectResourceData{
+								ID:           uuidToString(row.ID),
+								ResourceType: row.ResourceType,
+								ResourceRef:  ref,
+								Label:        label,
+							})
+							if row.ResourceType == "github_repo" {
+								var payload struct {
+									URL string `json:"url"`
+								}
+								if json.Unmarshal(row.ResourceRef, &payload) == nil && payload.URL != "" {
+									projectRepos = append(projectRepos, RepoData{URL: payload.URL})
+								}
+							}
+						}
+						resp.ProjectResources = out
+					}
+				}
+			}
+
+			if len(projectRepos) > 0 {
+				resp.Repos = projectRepos
+			} else if ws, err := h.Queries.GetWorkspace(r.Context(), parseUUID(qc.WorkspaceID)); err == nil && ws.Repos != nil {
 				var repos []RepoData
 				if json.Unmarshal(ws.Repos, &repos) == nil && len(repos) > 0 {
 					resp.Repos = repos
@@ -1379,6 +1455,7 @@ func (h *Handler) emitIssueExecutedOnFirstCompletion(r *http.Request, task *db.A
 	if task.StartedAt.Valid && task.CompletedAt.Valid {
 		durationMS = task.CompletedAt.Time.Sub(task.StartedAt.Time).Milliseconds()
 	}
+	taskContext := h.TaskService.AnalyticsContextForTask(r.Context(), *task)
 	// distinct_id prefers the human creator so agent-driven events flow into
 	// the issue-author's person profile (same place signup and
 	// workspace_created land). Agent-created issues keep the agent id with a
@@ -1391,6 +1468,11 @@ func (h *Handler) emitIssueExecutedOnFirstCompletion(r *http.Request, task *db.A
 		distinct,
 		uuidToString(marked.WorkspaceID),
 		uuidToString(marked.ID),
+		uuidToString(task.ID),
+		uuidToString(task.AgentID),
+		taskContext.Source,
+		taskContext.RuntimeMode,
+		taskContext.Provider,
 		durationMS,
 	))
 }
