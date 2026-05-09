@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Issue, TimelineEntry } from "@multica/core/types";
+import { ApiError } from "@multica/core/api";
 import { I18nProvider } from "@multica/core/i18n/react";
 import enCommon from "../../locales/en/common.json";
 import enIssues from "../../locales/en/issues.json";
@@ -204,11 +205,15 @@ const mockApiObj = vi.hoisted(() => ({
   listAgents: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock("@multica/core/api", () => ({
-  api: mockApiObj,
-  getApi: () => mockApiObj,
-  setApiInstance: vi.fn(),
-}));
+vi.mock("@multica/core/api", async () => {
+  const actual = await vi.importActual<typeof import("@multica/core/api")>("@multica/core/api");
+  return {
+    ...actual,
+    api: mockApiObj,
+    getApi: () => mockApiObj,
+    setApiInstance: vi.fn(),
+  };
+});
 
 // Mock issue config
 vi.mock("@multica/core/issues/config", () => ({
@@ -365,12 +370,12 @@ function createTestQueryClient() {
   });
 }
 
-function renderIssueDetail(issueId = "issue-1") {
+function renderIssueDetail(issueId = "issue-1", props?: { onDelete?: () => void }) {
   const queryClient = createTestQueryClient();
   return render(
     <I18nProvider locale="en" resources={TEST_RESOURCES}>
       <QueryClientProvider client={queryClient}>
-        <IssueDetail issueId={issueId} />
+        <IssueDetail issueId={issueId} {...props} />
       </QueryClientProvider>
     </I18nProvider>,
   );
@@ -491,6 +496,32 @@ describe("IssueDetail (shared)", () => {
     await waitFor(() => {
       expect(screen.getByText("Back to Issues")).toBeInTheDocument();
     });
+  });
+
+  it("fires onDelete callback when issue returns 404 ApiError", async () => {
+    mockApiObj.getIssue.mockRejectedValue(new ApiError("Not found", 404, "Not Found"));
+
+    const onDelete = vi.fn();
+    renderIssueDetail("nonexistent-id", { onDelete });
+
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("does not fire onDelete callback when issue returns a network error", async () => {
+    mockApiObj.getIssue.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const onDelete = vi.fn();
+    renderIssueDetail("nonexistent-id", { onDelete });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("This issue does not exist or has been deleted in this workspace."),
+      ).toBeInTheDocument();
+    });
+
+    expect(onDelete).not.toHaveBeenCalled();
   });
 
   it("renders Activity section header", async () => {

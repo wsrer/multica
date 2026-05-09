@@ -61,7 +61,7 @@ import { useIssueReactions } from "../hooks/use-issue-reactions";
 import { useIssueSubscribers } from "../hooks/use-issue-subscribers";
 import { ReactionBar } from "@multica/ui/components/common/reaction-bar";
 import { useFileUpload } from "@multica/core/hooks/use-file-upload";
-import { api } from "@multica/core/api";
+import { api, ApiError } from "@multica/core/api";
 import { timeAgo } from "@multica/core/utils";
 import { cn } from "@multica/ui/lib/utils";
 
@@ -273,7 +273,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
   // Issue data from TQ — uses detail query, seeded from list cache if available.
   // Only seed when description is present; list API omits it, and ContentEditor
   // reads defaultValue on mount only — seeding null description shows an empty editor.
-  const { data: issue = null, isLoading: issueLoading } = useQuery({
+  const { data: issue = null, isLoading: issueLoading, error: issueError } = useQuery({
     ...issueDetailOptions(wsId, id),
     initialData: () => {
       const cached = allIssues.find((i) => i.id === id);
@@ -302,16 +302,21 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
       firedDeleteCallbackRef.current = false;
       return;
     }
-    if (
-      hadIssueRef.current &&
-      !issueLoading &&
-      !firedDeleteCallbackRef.current &&
-      onDelete
-    ) {
+
+    if (issueLoading || firedDeleteCallbackRef.current || !onDelete) return;
+
+    // Fire onDelete when the issue is permanently absent. Two cases:
+    // 1) Issue was loaded but is now gone (WS deletion — removeQueries cleared data)
+    // 2) Issue was never loaded (stale tab — api.getIssue returned 404)
+    const isPermanentAbsence =
+      hadIssueRef.current ||
+      (issueError instanceof ApiError && issueError.status === 404);
+
+    if (isPermanentAbsence) {
       firedDeleteCallbackRef.current = true;
       onDelete();
     }
-  }, [issue, issueLoading, onDelete]);
+  }, [issue, issueLoading, issueError, onDelete]);
 
   // Custom hooks — encapsulate timeline, reactions, subscribers
   const {
