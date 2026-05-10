@@ -26,8 +26,7 @@
  * only keeps narrow deterministic exits for editor-owned slices, code block
  * context, structured plain text, and large payloads.
  */
-import { Extension } from "@tiptap/core";
-import type { JSONContent } from "@tiptap/core";
+import { Extension, type JSONContent } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Slice } from "@tiptap/pm/model";
 
