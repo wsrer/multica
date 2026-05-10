@@ -99,9 +99,9 @@ export function DiffViewer({ output, oldText, newText }: DiffViewerProps) {
             key={i}
             className={
               line.type === "add"
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                ? "bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                 : line.type === "del"
-                  ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                  ? "bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400"
                   : line.type === "header"
                     ? "text-blue-500 dark:text-blue-400"
                     : "text-muted-foreground"
