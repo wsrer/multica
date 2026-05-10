@@ -1708,7 +1708,8 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 	}
 
 	// Inject runtime-specific config (meta skill) so the agent discovers .agent_context/.
-	if err := execenv.InjectRuntimeConfig(env.WorkDir, provider, taskCtx); err != nil {
+	runtimeBrief, err := execenv.InjectRuntimeConfig(env.WorkDir, provider, taskCtx)
+	if err != nil {
 		d.logger.Warn("execenv: inject runtime config failed (non-fatal)", "error", err)
 	}
 	// NOTE: No cleanup — workdir is preserved for reuse by future tasks on
@@ -1834,11 +1835,16 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 	//   - hermes is driven through ACP and starts from a long-lived Hermes home;
 	//     deployments that cross a wrapper/container boundary can miss the
 	//     task-workdir AGENTS.md even when the prompt itself is delivered.
-	// Pass Multica-defined identity/persona instructions inline so the backend
-	// can prepend them to the turn payload instead of relying only on file
-	// discovery.
+	//   - kiro and kimi are wrapped through their own CLIs whose cwd handling
+	//     is opaque enough that we can't trust the file-based path either.
+	// Pass the full runtime brief inline (CLI catalog + workflow steps + agent
+	// identity/persona + skills + project context) so the backend prepends the
+	// same payload that file-based runtimes pick up from disk. Without this,
+	// these providers silently miss the workflow section and never call
+	// `multica issue status` / `multica issue comment add`, leaving issues
+	// stuck in `todo`.
 	if providerNeedsInlineSystemPrompt(provider) {
-		execOpts.SystemPrompt = instructions
+		execOpts.SystemPrompt = runtimeBrief
 	}
 
 	result, tools, err := d.executeAndDrain(ctx, backend, prompt, execOpts, taskLog, task.ID)
