@@ -180,6 +180,35 @@ describe("useTabStore actions", () => {
     expect(s.byWorkspace.acme.tabs[0].id).not.toBe(onlyTabId); // fresh tab
   });
 
+  it("ignores router-sync updates from a tab after it has been closed", () => {
+    const store = useTabStore.getState();
+    store.switchWorkspace("acme");
+    const closedTabId = store.addTab("/acme/settings", "Settings", "Settings");
+
+    store.closeTab(closedTabId);
+    const before = useTabStore.getState().byWorkspace.acme;
+
+    store.updateTab(closedTabId, { path: "/acme/runtimes", icon: "Monitor" });
+    store.updateTabHistory(closedTabId, 1, 2);
+
+    expect(useTabStore.getState().byWorkspace.acme).toBe(before);
+    expect(
+      useTabStore.getState().byWorkspace.acme.tabs.some((t) => t.id === closedTabId),
+    ).toBe(false);
+  });
+
+  it("does not replace the tab group for no-op router-sync updates", () => {
+    const store = useTabStore.getState();
+    store.switchWorkspace("acme");
+    const tab = useTabStore.getState().byWorkspace.acme.tabs[0];
+    const before = useTabStore.getState().byWorkspace.acme;
+
+    store.updateTab(tab.id, { path: tab.path, icon: tab.icon, title: tab.title });
+    store.updateTabHistory(tab.id, tab.historyIndex, tab.historyLength);
+
+    expect(useTabStore.getState().byWorkspace.acme).toBe(before);
+  });
+
   it("validateWorkspaceSlugs drops groups for slugs not in the valid set and repoints active", () => {
     const store = useTabStore.getState();
     store.switchWorkspace("acme");
