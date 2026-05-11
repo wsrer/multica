@@ -69,13 +69,24 @@ vi.mock("@multica/core/api", () => ({
   },
 }));
 
-vi.mock("@multica/core/issues/stores", () => ({
-  getPersistedCreateMode: mockGetPersistedCreateMode,
-  useRecentIssuesStore: (selector?: (state: { items: typeof mockRecentItems.current }) => unknown) => {
-    const state = { items: mockRecentItems.current };
-    return selector ? selector(state) : state;
-  },
-}));
+vi.mock("@multica/core/issues/stores", () => {
+  const EMPTY: Array<{ id: string; visitedAt: number }> = [];
+  return {
+    getPersistedCreateMode: mockGetPersistedCreateMode,
+    useRecentIssuesStore: (
+      selector?: (state: {
+        byWorkspace: Record<string, typeof mockRecentItems.current>;
+      }) => unknown,
+    ) => {
+      const state = { byWorkspace: { "ws-test": mockRecentItems.current } };
+      return selector ? selector(state) : state;
+    },
+    selectRecentIssues:
+      (wsId: string | null) =>
+      (state: { byWorkspace: Record<string, typeof mockRecentItems.current> }) =>
+        wsId ? (state.byWorkspace[wsId] ?? EMPTY) : EMPTY,
+  };
+});
 
 vi.mock("@multica/core", () => ({
   useWorkspaceId: () => "ws-test",

@@ -21,6 +21,7 @@ import { FileText, Loader2, Download } from "lucide-react";
 import { useT } from "../../i18n";
 import { isMarkdownFilename, MarkdownFilePreviewButton } from "../markdown-file-preview";
 import { ReadonlyContent } from "../readonly-content";
+import { useAttachmentDownloadResolver } from "../attachment-download-context";
 
 
 // ---------------------------------------------------------------------------
@@ -37,9 +38,10 @@ function FileCardView({ node }: NodeViewProps) {
   const filename = (node.attrs.filename as string) || "";
   const uploading = node.attrs.uploading as boolean;
   const canPreview = !uploading && Boolean(href) && isMarkdownFilename(filename);
+  const { openByUrl } = useAttachmentDownloadResolver();
 
   const openFile = () => {
-    window.open(href, "_blank", "noopener,noreferrer");
+    openByUrl(href);
   };
 
   return (

@@ -30,6 +30,7 @@ import type { SearchIssueResult, SearchProjectResult } from "@multica/core/types
 import { api } from "@multica/core/api";
 import {
   getPersistedCreateMode,
+  selectRecentIssues,
   useRecentIssuesStore,
 } from "@multica/core/issues/stores";
 import { issueDetailOptions } from "@multica/core/issues/queries";
@@ -142,8 +143,8 @@ export function SearchCommand() {
   const { push, pathname, getShareableUrl } = useNavigation();
   const open = useSearchStore((s) => s.open);
   const setOpen = useSearchStore((s) => s.setOpen);
-  const recentItems = useRecentIssuesStore((s) => s.items);
   const wsId = useWorkspaceId();
+  const recentItems = useRecentIssuesStore(selectRecentIssues(wsId));
   const p: WorkspacePaths = useWorkspacePaths();
   const { theme, setTheme } = useTheme();
   const currentWorkspace = useCurrentWorkspace();

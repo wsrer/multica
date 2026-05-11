@@ -23,6 +23,25 @@ vi.mock("@multica/core/workspace/hooks", () => ({
 vi.mock("@multica/core/issues/stores", () => ({
   useCommentCollapseStore: (selector: (state: { isCollapsed: () => boolean; toggle: () => void }) => unknown) =>
     selector({ isCollapsed: () => false, toggle: vi.fn() }),
+  useCommentDraftStore: Object.assign(
+    (selector?: any) => {
+      const state = {
+        drafts: {},
+        getDraft: () => undefined,
+        setDraft: vi.fn(),
+        clearDraft: vi.fn(),
+      };
+      return selector ? selector(state) : state;
+    },
+    {
+      getState: () => ({
+        drafts: {},
+        getDraft: () => undefined,
+        setDraft: vi.fn(),
+        clearDraft: vi.fn(),
+      }),
+    },
+  ),
 }));
 
 vi.mock("@multica/core/hooks/use-file-upload", () => ({
@@ -51,6 +70,7 @@ vi.mock("../../editor", () => ({
   FileDropOverlay: () => null,
   copyMarkdown: vi.fn(),
   useFileDropZone: () => ({ isDragOver: false, dropZoneProps: {} }),
+  useDownloadAttachment: () => vi.fn(),
 }));
 
 vi.mock("./reply-input", () => ({
