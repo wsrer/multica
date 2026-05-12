@@ -1497,7 +1497,6 @@ type TaskMessageRequest struct {
 	Content string         `json:"content,omitempty"`
 	Input   map[string]any `json:"input,omitempty"`
 	Output  string         `json:"output,omitempty"`
-	Meta    map[string]any `json:"meta,omitempty"`
 }
 
 type TaskMessageBatchRequest struct {
@@ -1566,7 +1565,6 @@ func (h *Handler) ReportTaskMessages(w http.ResponseWriter, r *http.Request) {
 				Content: msg.Content,
 				Input:   msg.Input,
 				Output:  msg.Output,
-				Meta:    msg.Meta,
 			})
 		}
 	}

@@ -34,9 +34,6 @@ import { api } from "@multica/core/api";
 import type { AgentTask, Agent, AgentRuntime } from "@multica/core/types/agent";
 import { redactSecrets } from "./redact";
 import type { TimelineItem } from "./build-timeline";
-import { isCommandTool, isEditTool } from "./build-timeline";
-import { DiffViewer } from "./diff-viewer";
-import { CommandOutput } from "./command-output";
 import { useT } from "../../i18n";
 
 interface AgentTranscriptDialogProps {
@@ -667,34 +664,13 @@ const TranscriptEventRow = ({
 
 function EventDetailContent({ item }: { item: TimelineItem }) {
   switch (item.type) {
-    case "tool_use": {
-      if (isEditTool(item.tool) && item.input) {
-        const oldText = typeof item.input.old_text === "string" ? item.input.old_text : undefined;
-        const newText = typeof item.input.new_text === "string" ? item.input.new_text : undefined;
-        if (oldText || newText) {
-          return <DiffViewer oldText={oldText} newText={newText} />;
-        }
-      }
+    case "tool_use":
       return (
         <pre className="max-h-60 overflow-auto p-3 text-[11px] text-muted-foreground whitespace-pre-wrap break-all">
           {item.input ? redactSecrets(JSON.stringify(item.input, null, 2)) : ""}
         </pre>
       );
-    }
-    case "tool_result": {
-      if (isCommandTool(item.tool)) {
-        return <CommandOutput output={item.output} />;
-      }
-      if (isEditTool(item.tool)) {
-        const metaDiff = item.meta?.diff as { old_text?: string; new_text?: string } | undefined;
-        return (
-          <DiffViewer
-            output={item.output}
-            oldText={metaDiff?.old_text}
-            newText={metaDiff?.new_text}
-          />
-        );
-      }
+    case "tool_result":
       return (
         <pre className="max-h-60 overflow-auto p-3 text-[11px] text-muted-foreground whitespace-pre-wrap break-all">
           {item.output
@@ -704,7 +680,6 @@ function EventDetailContent({ item }: { item: TimelineItem }) {
             : ""}
         </pre>
       );
-    }
     case "thinking":
       return (
         <pre className="max-h-60 overflow-auto p-3 text-[11px] text-muted-foreground whitespace-pre-wrap break-words">

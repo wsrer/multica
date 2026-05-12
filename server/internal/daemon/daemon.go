@@ -2077,9 +2077,8 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 				case agent.MessageToolResult:
 					s := seq.Add(1)
 					output := msg.Output
-					isCommand := msg.Tool == "Bash" || msg.Tool == "exec_command" || msg.Tool == "terminal"
-					if !isCommand && len(output) > 32768 {
-						output = output[:32768]
+					if len(output) > 8192 {
+						output = output[:8192]
 					}
 					toolName := msg.Tool
 					if toolName == "" && msg.CallID != "" {
@@ -2094,7 +2093,6 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 						Type:   "tool_result",
 						Tool:   toolName,
 						Output: output,
-						Meta:   msg.ToolResultMeta,
 					})
 					mu.Unlock()
 				case agent.MessageThinking:
