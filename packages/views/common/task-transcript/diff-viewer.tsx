@@ -1,0 +1,288 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Check, ChevronDown, ChevronUp, Copy } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@multica/ui/components/ui/toggle-group";
+import { useT } from "../../i18n";
+
+type DiffViewMode = "unified" | "split";
+
+interface DiffViewerProps {
+  output?: string;
+  oldText?: string;
+  newText?: string;
+  defaultMode?: DiffViewMode;
+}
+
+interface DiffLine {
+  type: "add" | "del" | "context" | "hunk" | "file";
+  text: string;
+}
+
+interface SplitRow {
+  type: "add" | "del" | "context" | "pair" | "hunk" | "file";
+  left: string;
+  right: string;
+}
+
+function parseUnifiedDiff(text: string): DiffLine[] {
+  const lines: DiffLine[] = [];
+  for (const line of text.split("\n")) {
+    if (line.startsWith("--- ") || line.startsWith("+++ ")) {
+      lines.push({ type: "file", text: line });
+      continue;
+    }
+    if (line.startsWith("@@ ")) {
+      lines.push({ type: "hunk", text: line });
+      continue;
+    }
+    if (line.startsWith("+") && !line.startsWith("+++ ")) {
+      lines.push({ type: "add", text: line });
+      continue;
+    }
+    if (line.startsWith("-") && !line.startsWith("--- ")) {
+      lines.push({ type: "del", text: line });
+      continue;
+    }
+    lines.push({ type: "context", text: line });
+  }
+  return lines;
+}
+
+function buildDiffFromOldNew(oldText: string, newText: string): string {
+  const oldLines = oldText.split("\n");
+  const newLines = newText.split("\n");
+  const lines: string[] = [
+    "--- a/file",
+    "+++ b/file",
+    `@@ -1,${oldLines.length} +1,${newLines.length} @@`,
+    ...oldLines.map((line) => `-${line}`),
+    ...newLines.map((line) => `+${line}`),
+  ];
+  return lines.join("\n");
+}
+
+function stripDiffPrefix(line: string, type: DiffLine["type"]): string {
+  if (type === "add" || type === "del") {
+    return line.slice(1);
+  }
+  if (type === "context" && line.startsWith(" ")) {
+    return line.slice(1);
+  }
+  return line;
+}
+
+function buildSplitRows(lines: DiffLine[]): SplitRow[] {
+  const rows: SplitRow[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const current = lines[i]!;
+
+    if (current.type === "file" || current.type === "hunk") {
+      rows.push({
+        type: current.type,
+        left: current.text,
+        right: current.text,
+      });
+      i += 1;
+      continue;
+    }
+
+    if (current.type === "del") {
+      const next = lines[i + 1];
+      if (next?.type === "add") {
+        rows.push({
+          type: "pair",
+          left: stripDiffPrefix(current.text, "del"),
+          right: stripDiffPrefix(next.text, "add"),
+        });
+        i += 2;
+        continue;
+      }
+      rows.push({
+        type: "del",
+        left: stripDiffPrefix(current.text, "del"),
+        right: "",
+      });
+      i += 1;
+      continue;
+    }
+
+    if (current.type === "add") {
+      rows.push({
+        type: "add",
+        left: "",
+        right: stripDiffPrefix(current.text, "add"),
+      });
+      i += 1;
+      continue;
+    }
+
+    rows.push({
+      type: "context",
+      left: stripDiffPrefix(current.text, "context"),
+      right: stripDiffPrefix(current.text, "context"),
+    });
+    i += 1;
+  }
+  return rows;
+}
+
+export function DiffViewer({
+  output,
+  oldText,
+  newText,
+  defaultMode = "unified",
+}: DiffViewerProps) {
+  const { t } = useT("agents");
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [mode, setMode] = useState<DiffViewMode>(defaultMode);
+
+  const diffText = useMemo(() => {
+    if (output && output.length > 0) return output;
+    if (oldText != null || newText != null) {
+      return buildDiffFromOldNew(oldText ?? "", newText ?? "");
+    }
+    return "";
+  }, [output, oldText, newText]);
+
+  const lines = useMemo(() => parseUnifiedDiff(diffText), [diffText]);
+  const hasVisualDiff = lines.some((line) => line.type === "add" || line.type === "del");
+  const isLong = lines.length > 100;
+  const displayLines = expanded || !isLong ? lines : lines.slice(0, 100);
+  const splitRows = useMemo(() => buildSplitRows(displayLines), [displayLines]);
+  const truncated = !expanded && isLong;
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(diffText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="overflow-hidden rounded">
+      <div className="flex items-center justify-between border-b bg-muted/60 px-3 py-1.5">
+        <span className="text-[10px] text-muted-foreground">
+          {hasVisualDiff ? t(($) => $.transcript.file_changes) : t(($) => $.transcript.file_content)}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <ToggleGroup
+            type="single"
+            value={mode}
+            onValueChange={(value) => {
+              if (value === "unified" || value === "split") setMode(value);
+            }}
+            size="sm"
+            variant="outline"
+            spacing={0}
+            aria-label={t(($) => $.transcript.file_changes)}
+          >
+            <ToggleGroupItem value="unified" aria-label={t(($) => $.transcript.diff_unified)} className="px-2 text-[10px]">
+              {t(($) => $.transcript.diff_unified)}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="split" aria-label={t(($) => $.transcript.diff_split)} className="px-2 text-[10px]">
+              {t(($) => $.transcript.diff_split)}
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <button
+            type="button"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+            onClick={handleCopy}
+          >
+            {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+          </button>
+        </div>
+      </div>
+
+      {!hasVisualDiff ? (
+        <div className="p-3 text-[11px] text-muted-foreground">
+          {t(($) => $.transcript.no_visual_diff)}
+        </div>
+      ) : (
+        <div className="max-h-96 overflow-auto p-3 text-[11px] font-mono leading-relaxed">
+          {mode === "unified" ? (
+            <div className="whitespace-pre-wrap break-all">
+              {displayLines.map((line, i) => (
+                <div
+                  key={i}
+                  className={
+                    line.type === "add"
+                      ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
+                      : line.type === "del"
+                        ? "bg-red-500/10 text-red-600 dark:bg-red-500/20 dark:text-red-400"
+                        : line.type === "hunk" || line.type === "file"
+                          ? "text-blue-500 dark:text-blue-400"
+                          : "text-muted-foreground"
+                  }
+                >
+                  {line.text}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <table className="w-full table-fixed border-collapse">
+              <tbody>
+                {splitRows.map((row, i) => {
+                  if (row.type === "file" || row.type === "hunk") {
+                    return (
+                      <tr key={i}>
+                        <td colSpan={2} className="px-1 py-0.5 text-blue-500 dark:text-blue-400">
+                          {row.left}
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return (
+                    <tr key={i}>
+                      <td
+                        className={
+                          row.type === "del" || row.type === "pair"
+                            ? "w-1/2 bg-red-500/10 px-1 py-0.5 text-red-600 dark:bg-red-500/20 dark:text-red-400"
+                            : "w-1/2 px-1 py-0.5 text-muted-foreground"
+                        }
+                      >
+                        {row.left}
+                      </td>
+                      <td
+                        className={
+                          row.type === "add" || row.type === "pair"
+                            ? "w-1/2 bg-emerald-500/10 px-1 py-0.5 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
+                            : "w-1/2 px-1 py-0.5 text-muted-foreground"
+                        }
+                      >
+                        {row.right}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+
+          {truncated && (
+            <button
+              type="button"
+              className="mt-1 flex items-center gap-1 text-[10px] text-primary hover:underline"
+              onClick={() => setExpanded(true)}
+            >
+              <ChevronDown className="size-3" />
+              {t(($) => $.transcript.show_all_lines, { count: lines.length })}
+            </button>
+          )}
+          {expanded && isLong && (
+            <button
+              type="button"
+              className="mt-1 flex items-center gap-1 text-[10px] text-primary hover:underline"
+              onClick={() => setExpanded(false)}
+            >
+              <ChevronUp className="size-3" />
+              {t(($) => $.transcript.collapse)}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

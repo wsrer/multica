@@ -455,6 +455,9 @@ type codexClient struct {
 
 	turnErrorMu sync.Mutex
 	turnError   string // captured from turn/completed status=failed or terminal error notifications
+
+	fileChangeDeltaMu sync.Mutex
+	fileChangeDeltas  map[string]string
 }
 
 func (c *codexClient) setTurnError(msg string) {
@@ -739,11 +742,13 @@ func (c *codexClient) handleEvent(msg map[string]any) {
 		}
 	case "patch_apply_end":
 		callID, _ := msg["call_id"].(string)
+		output, _ := msg["output"].(string)
 		if c.onMessage != nil {
 			c.onMessage(Message{
 				Type:   MessageToolResult,
 				Tool:   "patch_apply",
 				CallID: callID,
+				Output: output,
 			})
 		}
 	case "task_complete":
@@ -886,6 +891,7 @@ func (c *codexClient) handleItemNotification(method string, params map[string]an
 		}
 
 	case method == "item/started" && itemType == "fileChange":
+		c.clearFileChangeDelta(itemID)
 		if c.onMessage != nil {
 			c.onMessage(Message{
 				Type:   MessageToolUse,
@@ -894,12 +900,25 @@ func (c *codexClient) handleItemNotification(method string, params map[string]an
 			})
 		}
 
+	case method == "item/fileChange/outputDelta" && itemType == "fileChange":
+		delta, _ := params["delta"].(string)
+		c.appendFileChangeDelta(itemID, delta)
+
 	case method == "item/completed" && itemType == "fileChange":
+		output := c.popFileChangeDelta(itemID)
+		if output == "" {
+			if aggregatedOutput, ok := item["aggregatedOutput"].(string); ok {
+				output = aggregatedOutput
+			} else if inlineOutput, ok := item["output"].(string); ok {
+				output = inlineOutput
+			}
+		}
 		if c.onMessage != nil {
 			c.onMessage(Message{
 				Type:   MessageToolResult,
 				Tool:   "patch_apply",
 				CallID: itemID,
+				Output: output,
 			})
 		}
 
@@ -937,6 +956,45 @@ func describeCodexItemProgressActivity(method, itemType, itemID string) string {
 		return fmt.Sprintf("%s:%s", method, itemType)
 	}
 	return fmt.Sprintf("%s:%s:%s", method, itemType, itemID)
+}
+
+func (c *codexClient) clearFileChangeDelta(itemID string) {
+	if itemID == "" {
+		return
+	}
+	c.fileChangeDeltaMu.Lock()
+	defer c.fileChangeDeltaMu.Unlock()
+	if c.fileChangeDeltas == nil {
+		c.fileChangeDeltas = make(map[string]string)
+		return
+	}
+	delete(c.fileChangeDeltas, itemID)
+}
+
+func (c *codexClient) appendFileChangeDelta(itemID, delta string) {
+	if itemID == "" || delta == "" {
+		return
+	}
+	c.fileChangeDeltaMu.Lock()
+	defer c.fileChangeDeltaMu.Unlock()
+	if c.fileChangeDeltas == nil {
+		c.fileChangeDeltas = make(map[string]string)
+	}
+	c.fileChangeDeltas[itemID] += delta
+}
+
+func (c *codexClient) popFileChangeDelta(itemID string) string {
+	if itemID == "" {
+		return ""
+	}
+	c.fileChangeDeltaMu.Lock()
+	defer c.fileChangeDeltaMu.Unlock()
+	if c.fileChangeDeltas == nil {
+		return ""
+	}
+	output := c.fileChangeDeltas[itemID]
+	delete(c.fileChangeDeltas, itemID)
+	return output
 }
 
 // extractUsageFromMap extracts token usage from a map that may contain

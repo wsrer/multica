@@ -346,6 +346,13 @@
     "copy_all": "Copy all",
     "copy_filtered": "Copy filtered",
     "copied": "Copied",
+    "file_changes": "File changes",
+    "file_content": "File content",
+    "diff_unified": "Unified",
+    "diff_split": "Split",
+    "no_visual_diff": "No visual diff available for this file change.",
+    "show_all_lines": "Show all {{count}} lines",
+    "collapse": "Collapse",
     "waiting_events": "Waiting for events...",
     "no_data": "No execution data recorded."
   },

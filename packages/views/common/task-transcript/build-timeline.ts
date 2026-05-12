@@ -11,6 +11,59 @@ export interface TimelineItem {
   output?: string;
 }
 
+const EDIT_TOOL_NAMES = new Set([
+  "patch_apply",
+  "patch",
+  "apply_patch",
+  "edit",
+  "edit_file",
+  "write",
+  "write_file",
+  "multiedit",
+  "multi_edit",
+  "file_edit",
+  "str_replace_editor",
+  "insert",
+  "replace",
+  "file_change",
+  "filechange",
+]);
+
+function normalizeToolName(tool: string): string {
+  return tool
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+export function isEditTool(tool?: string): boolean {
+  if (!tool) return false;
+  const normalized = normalizeToolName(tool);
+  if (EDIT_TOOL_NAMES.has(normalized)) return true;
+  return (
+    normalized.includes("edit") ||
+    normalized.includes("patch") ||
+    normalized.includes("write_file")
+  );
+}
+
+export function looksLikeUnifiedDiff(output?: string): boolean {
+  if (!output) return false;
+  let hasFileHeader = false;
+  let hasHunk = false;
+  let hasChangeLine = false;
+
+  for (const line of output.split("\n")) {
+    if (line.startsWith("--- ") || line.startsWith("+++ ")) hasFileHeader = true;
+    if (line.startsWith("@@ ")) hasHunk = true;
+    if ((line.startsWith("+") && !line.startsWith("+++ ")) || (line.startsWith("-") && !line.startsWith("--- "))) {
+      hasChangeLine = true;
+    }
+  }
+
+  return hasChangeLine && (hasFileHeader || hasHunk);
+}
+
 /** Build a chronologically ordered timeline from raw task messages. */
 export function buildTimeline(msgs: TaskMessagePayload[]): TimelineItem[] {
   const items: TimelineItem[] = [];

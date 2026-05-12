@@ -338,6 +338,13 @@
     "copy_all": "全部复制",
     "copy_filtered": "复制筛选结果",
     "copied": "已复制",
+    "file_changes": "文件变更",
+    "file_content": "文件内容",
+    "diff_unified": "统一差异",
+    "diff_split": "拆分差异",
+    "no_visual_diff": "该次文件修改未提供可视化差异。",
+    "show_all_lines": "显示全部 {{count}} 行",
+    "collapse": "收起",
     "waiting_events": "等待事件中...",
     "no_data": "未记录执行数据。"
   },

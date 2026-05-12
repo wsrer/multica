@@ -33,7 +33,8 @@ import { ActorAvatar } from "../actor-avatar";
 import { api } from "@multica/core/api";
 import type { AgentTask, Agent, AgentRuntime } from "@multica/core/types/agent";
 import { redactSecrets } from "./redact";
-import type { TimelineItem } from "./build-timeline";
+import { isEditTool, looksLikeUnifiedDiff, type TimelineItem } from "./build-timeline";
+import { DiffViewer } from "./diff-viewer";
 import { useT } from "../../i18n";
 
 interface AgentTranscriptDialogProps {
@@ -587,10 +588,25 @@ const TranscriptEventRow = ({
   const color = getEventColor(item);
   const label = getEventLabel(item);
   const summary = getEventSummary(item);
+  const toolUseHasInlineDiff =
+    item.type === "tool_use" &&
+    isEditTool(item.tool) &&
+    item.input != null &&
+    (
+      typeof item.input.old_text === "string" ||
+      typeof item.input.new_text === "string"
+    );
 
   const hasDetail =
-    (item.type === "tool_use" && item.input && Object.keys(item.input).length > 0) ||
-    (item.type === "tool_result" && item.output && item.output.length > 0) ||
+    (item.type === "tool_use" && (
+      (item.input && Object.keys(item.input).length > 0) ||
+      toolUseHasInlineDiff
+    )) ||
+    (item.type === "tool_result" && (
+      (item.output && item.output.length > 0) ||
+      isEditTool(item.tool) ||
+      looksLikeUnifiedDiff(item.output)
+    )) ||
     (item.type === "thinking" && item.content && item.content.length > 0) ||
     (item.type === "text" && item.content && item.content.split("\n").length > 1) ||
     (item.type === "error" && item.content && item.content.length > 0);
@@ -664,13 +680,24 @@ const TranscriptEventRow = ({
 
 function EventDetailContent({ item }: { item: TimelineItem }) {
   switch (item.type) {
-    case "tool_use":
+    case "tool_use": {
+      if (isEditTool(item.tool) && item.input) {
+        const oldText = typeof item.input.old_text === "string" ? item.input.old_text : undefined;
+        const newText = typeof item.input.new_text === "string" ? item.input.new_text : undefined;
+        if (oldText != null || newText != null) {
+          return <DiffViewer oldText={oldText} newText={newText} />;
+        }
+      }
       return (
         <pre className="max-h-60 overflow-auto p-3 text-[11px] text-muted-foreground whitespace-pre-wrap break-all">
           {item.input ? redactSecrets(JSON.stringify(item.input, null, 2)) : ""}
         </pre>
       );
+    }
     case "tool_result":
+      if (isEditTool(item.tool) || looksLikeUnifiedDiff(item.output)) {
+        return <DiffViewer output={item.output} />;
+      }
       return (
         <pre className="max-h-60 overflow-auto p-3 text-[11px] text-muted-foreground whitespace-pre-wrap break-all">
           {item.output

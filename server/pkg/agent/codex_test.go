@@ -515,6 +515,58 @@ func TestCodexRawItemCommandExecution(t *testing.T) {
 	}
 }
 
+func TestCodexRawItemFileChangeAggregatesOutputDelta(t *testing.T) {
+	t.Parallel()
+
+	c, _, _ := newTestCodexClient(t)
+	c.notificationProtocol = "raw"
+
+	var messages []Message
+	c.onMessage = func(msg Message) {
+		messages = append(messages, msg)
+	}
+
+	c.handleLine(`{"jsonrpc":"2.0","method":"item/started","params":{"item":{"type":"fileChange","id":"patch-1"}}}`)
+	c.handleLine(`{"jsonrpc":"2.0","method":"item/fileChange/outputDelta","params":{"item":{"type":"fileChange","id":"patch-1"},"delta":"--- a/a.txt\n+++ b/a.txt\n"}}`)
+	c.handleLine(`{"jsonrpc":"2.0","method":"item/fileChange/outputDelta","params":{"item":{"type":"fileChange","id":"patch-1"},"delta":"@@ -1 +1 @@\n-old\n+new\n"}}`)
+	c.handleLine(`{"jsonrpc":"2.0","method":"item/completed","params":{"item":{"type":"fileChange","id":"patch-1"}}}`)
+
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(messages))
+	}
+	if messages[0].Type != MessageToolUse || messages[0].Tool != "patch_apply" || messages[0].CallID != "patch-1" {
+		t.Fatalf("unexpected start message: %+v", messages[0])
+	}
+	if messages[1].Type != MessageToolResult || messages[1].Tool != "patch_apply" || messages[1].CallID != "patch-1" {
+		t.Fatalf("unexpected complete message: %+v", messages[1])
+	}
+	if messages[1].Output != "--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n" {
+		t.Fatalf("unexpected aggregated diff output: %q", messages[1].Output)
+	}
+}
+
+func TestCodexRawItemFileChangeUsesAggregatedOutputFallback(t *testing.T) {
+	t.Parallel()
+
+	c, _, _ := newTestCodexClient(t)
+	c.notificationProtocol = "raw"
+
+	var messages []Message
+	c.onMessage = func(msg Message) {
+		messages = append(messages, msg)
+	}
+
+	c.handleLine(`{"jsonrpc":"2.0","method":"item/started","params":{"item":{"type":"fileChange","id":"patch-1"}}}`)
+	c.handleLine(`{"jsonrpc":"2.0","method":"item/completed","params":{"item":{"type":"fileChange","id":"patch-1","aggregatedOutput":"patched: a.txt"}}}`)
+
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(messages))
+	}
+	if messages[1].Type != MessageToolResult || messages[1].Output != "patched: a.txt" {
+		t.Fatalf("unexpected complete message: %+v", messages[1])
+	}
+}
+
 func TestCodexRawItemAgentMessageFinalAnswer(t *testing.T) {
 	t.Parallel()
 
