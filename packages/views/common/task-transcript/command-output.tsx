@@ -26,33 +26,33 @@ export function CommandOutput({ output }: CommandOutputProps) {
   };
 
   return (
-    <div className="overflow-hidden rounded bg-zinc-50 dark:bg-zinc-950">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-200 dark:border-zinc-800">
+    <div className="overflow-hidden rounded bg-zinc-950">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-800">
         <div className="flex items-center gap-1.5">
-          <Terminal className="size-3 text-zinc-400 dark:text-zinc-500" />
-          <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{t(($) => $.transcript.command_output)}</span>
+          <Terminal className="size-3 text-zinc-500" />
+          <span className="text-[10px] text-zinc-500">{t(($) => $.transcript.command_output)}</span>
           {isLong && (
-            <span className="text-[10px] text-zinc-300 dark:text-zinc-600">
+            <span className="text-[10px] text-zinc-600">
               ({t(($) => $.transcript.lines_count, { count: lines.length })})
             </span>
           )}
         </div>
         <button
           type="button"
-          className="text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+          className="text-zinc-500 hover:text-zinc-300 transition-colors"
           onClick={handleCopy}
         >
           {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
         </button>
       </div>
-      <pre className="max-h-96 overflow-auto p-3 text-[11px] leading-relaxed font-mono text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-all">
+      <pre className="max-h-96 overflow-auto p-3 text-[11px] leading-relaxed font-mono text-zinc-300 whitespace-pre-wrap break-all">
         {displayLines.map((line, i) => (
           <div key={i}>{line}</div>
         ))}
         {truncated && (
           <button
             type="button"
-            className="flex items-center gap-1 mt-1 text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+            className="flex items-center gap-1 mt-1 text-[10px] text-blue-400 hover:underline cursor-pointer"
             onClick={() => setExpanded(true)}
           >
             <ChevronDown className="size-3" />
@@ -62,7 +62,7 @@ export function CommandOutput({ output }: CommandOutputProps) {
         {expanded && isLong && (
           <button
             type="button"
-            className="flex items-center gap-1 mt-1 text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+            className="flex items-center gap-1 mt-1 text-[10px] text-blue-400 hover:underline cursor-pointer"
             onClick={() => setExpanded(false)}
           >
             <ChevronUp className="size-3" />
