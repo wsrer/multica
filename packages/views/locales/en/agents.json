@@ -347,14 +347,7 @@
     "copy_filtered": "Copy filtered",
     "copied": "Copied",
     "waiting_events": "Waiting for events...",
-    "no_data": "No execution data recorded.",
-    "command_output": "Command output",
-    "lines_count_one": "{{count}} line",
-    "lines_count_other": "{{count}} lines",
-    "show_all_lines_other": "Show all {{count}} lines",
-    "collapse": "Collapse",
-    "file_changes": "File changes",
-    "file_content": "File content"
+    "no_data": "No execution data recorded."
   },
   "task_failure": {
     "agent_error": "Agent execution error",

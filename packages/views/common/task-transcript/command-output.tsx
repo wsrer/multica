@@ -2,14 +2,12 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Copy, Check, Terminal } from "lucide-react";
-import { useT } from "../../i18n";
 
 interface CommandOutputProps {
   output?: string;
 }
 
 export function CommandOutput({ output }: CommandOutputProps) {
-  const { t } = useT("agents");
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -30,10 +28,10 @@ export function CommandOutput({ output }: CommandOutputProps) {
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-800">
         <div className="flex items-center gap-1.5">
           <Terminal className="size-3 text-zinc-500" />
-          <span className="text-[10px] text-zinc-500">{t(($) => $.transcript.command_output)}</span>
+          <span className="text-[10px] text-zinc-500">Command output</span>
           {isLong && (
             <span className="text-[10px] text-zinc-600">
-              ({t(($) => $.transcript.lines_count, { count: lines.length })})
+              ({lines.length} lines)
             </span>
           )}
         </div>
@@ -56,7 +54,7 @@ export function CommandOutput({ output }: CommandOutputProps) {
             onClick={() => setExpanded(true)}
           >
             <ChevronDown className="size-3" />
-            {t(($) => $.transcript.show_all_lines, { count: lines.length })}
+            Show all {lines.length} lines
           </button>
         )}
         {expanded && isLong && (
@@ -66,7 +64,7 @@ export function CommandOutput({ output }: CommandOutputProps) {
             onClick={() => setExpanded(false)}
           >
             <ChevronUp className="size-3" />
-            {t(($) => $.transcript.collapse)}
+            Collapse
           </button>
         )}
       </pre>

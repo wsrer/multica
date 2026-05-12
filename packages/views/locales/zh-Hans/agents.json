@@ -339,13 +339,7 @@
     "copy_filtered": "复制筛选结果",
     "copied": "已复制",
     "waiting_events": "等待事件中...",
-    "no_data": "未记录执行数据。",
-    "command_output": "命令输出",
-    "lines_count_other": "{{count}} 行",
-    "show_all_lines_other": "显示全部 {{count}} 行",
-    "collapse": "收起",
-    "file_changes": "文件变更",
-    "file_content": "文件内容"
+    "no_data": "未记录执行数据。"
   },
   "task_failure": {
     "agent_error": "智能体执行出错",
