@@ -478,6 +478,7 @@ export function AgentTranscriptDialog({
                   }}
                   item={item}
                   isSelected={selectedSeq === item.seq}
+                  taskStartedAt={task.started_at ?? task.created_at}
                 />
               ))}
             </div>
@@ -576,12 +577,14 @@ function TimelineBar({
 interface TranscriptEventRowProps {
   item: TimelineItem;
   isSelected: boolean;
+  taskStartedAt: string;
 }
 
 const TranscriptEventRow = ({
   ref,
   item,
   isSelected,
+  taskStartedAt,
 }: TranscriptEventRowProps & { ref?: React.Ref<HTMLDivElement> }) => {
   const [expanded, setExpanded] = useState(false);
   const color = getEventColor(item);
@@ -639,9 +642,12 @@ const TranscriptEventRow = ({
             </div>
           </CollapsibleTrigger>
 
-          {/* Seq number / index */}
+          {/* Elapsed time + seq */}
           <span className="shrink-0 text-[10px] text-muted-foreground/50 tabular-nums mt-1">
-            #{item.seq}
+            {item.created_at
+              ? formatElapsedMs(new Date(item.created_at).getTime() - new Date(taskStartedAt).getTime())
+              : null}
+            {item.created_at && " "}#{item.seq}
           </span>
         </div>
 

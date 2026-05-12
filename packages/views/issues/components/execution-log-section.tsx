@@ -346,9 +346,6 @@ function PastRow({ task, issueId }: { task: AgentTask; issueId: string }) {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t(($) => $.execution_log.retry_failed));
     } finally {
-      // Reset on both success and failure: the past row stays mounted
-      // (its task.id is unchanged), so leaving `retrying` true on success
-      // would pin the button as a permanent spinner.
       setRetrying(false);
     }
   };

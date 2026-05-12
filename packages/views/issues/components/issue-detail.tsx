@@ -1396,7 +1396,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
                   customScrollParent={scrollContainerEl}
                   data={items}
                   increaseViewportBy={{ top: 800, bottom: 800 }}
-                  computeItemKey={(_i, item) => `${item.kind}:${item.id}`}
+                  computeItemKey={(_i: number, item: TimelineItem) => `${item.kind}:${item.id}`}
                   skipAnimationFrameInResizeObserver
                   // followOutput intentionally NOT set. Virtuoso treats it as
                   // a sticky "is at bottom" flag and resets scrollTop to
@@ -1413,7 +1413,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
                   // measurement, etc.) — which fights against the user when
                   // they scroll up. Deep-link landing is handled imperatively
                   // by the useEffect above (scrollToIndex + scrollIntoView).
-                  itemContent={(_i, item) => {
+                  itemContent={(_i: number, item: TimelineItem) => {
                     if (item.kind === "resolved-bar") {
                       return (
                         // data-comment-id is the anchor for inbox deep-link;
@@ -1452,7 +1452,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
                     // activity-group
                     return (
                       <div className="pb-3 px-4 flex flex-col gap-3">
-                        {item.entries.map((entry) => {
+                        {item.entries.map((entry: TimelineEntry) => {
                           const details = (entry.details ?? {}) as Record<string, string>;
                           const isStatusChange = entry.action === "status_changed";
                           const isPriorityChange = entry.action === "priority_changed";

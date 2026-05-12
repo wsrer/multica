@@ -48,6 +48,8 @@ type TaskMessagePayload struct {
 	Content string         `json:"content,omitempty"` // text content
 	Input   map[string]any `json:"input,omitempty"`   // tool input (tool_use only)
 	Output  string         `json:"output,omitempty"`  // tool output (tool_result only)
+	Meta      map[string]any `json:"meta,omitempty"`      // structured metadata (diff hunks, exit codes, etc.)
+	CreatedAt string         `json:"created_at,omitempty"` // ISO 8601 timestamp
 }
 
 // DaemonRegisterPayload is sent from daemon to server on connection.

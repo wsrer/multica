@@ -174,6 +174,13 @@ type daemonWorkspaceReposResponse struct {
 // host shouldn't take down registration just because its tz string is junk.
 // Real validation happens on the user-driven PATCH path where we surface the
 // error.
+func formatPgTimestamptz(ts pgtype.Timestamptz) string {
+	if !ts.Valid {
+		return ""
+	}
+	return ts.Time.Format(time.RFC3339)
+}
+
 func normalizeRuntimeTimezone(tz string) string {
 	tz = strings.TrimSpace(tz)
 	if tz == "" {
@@ -1642,6 +1649,7 @@ type TaskMessageRequest struct {
 	Content string         `json:"content,omitempty"`
 	Input   map[string]any `json:"input,omitempty"`
 	Output  string         `json:"output,omitempty"`
+	Meta    map[string]any `json:"meta,omitempty"`
 }
 
 type TaskMessageBatchRequest struct {
@@ -1690,7 +1698,7 @@ func (h *Handler) ReportTaskMessages(w http.ResponseWriter, r *http.Request) {
 		if msg.Input != nil {
 			inputJSON, _ = json.Marshal(msg.Input)
 		}
-		h.Queries.CreateTaskMessage(r.Context(), db.CreateTaskMessageParams{
+dbMsg, err := h.Queries.CreateTaskMessage(r.Context(), db.CreateTaskMessageParams{
 			TaskID:  parseUUID(taskID),
 			Seq:     int32(msg.Seq),
 			Type:    msg.Type,
@@ -1699,6 +1707,10 @@ func (h *Handler) ReportTaskMessages(w http.ResponseWriter, r *http.Request) {
 			Input:   inputJSON,
 			Output:  pgtype.Text{String: msg.Output, Valid: msg.Output != ""},
 		})
+		if err != nil {
+			slog.Error("failed to persist task message", "task_id", taskID, "error", err)
+			continue
+		}
 
 		if workspaceID != "" {
 			h.publishTask(protocol.EventTaskMessage, workspaceID, "system", "", taskID, protocol.TaskMessagePayload{
@@ -1710,6 +1722,8 @@ func (h *Handler) ReportTaskMessages(w http.ResponseWriter, r *http.Request) {
 				Content: msg.Content,
 				Input:   msg.Input,
 				Output:  msg.Output,
+				Meta:    msg.Meta,
+				CreatedAt: dbMsg.CreatedAt.Time.Format(time.RFC3339),
 			})
 		}
 	}
@@ -1766,6 +1780,7 @@ func (h *Handler) ListTaskMessages(w http.ResponseWriter, r *http.Request) {
 			Content: m.Content.String,
 			Input:   input,
 			Output:  m.Output.String,
+				CreatedAt: formatPgTimestamptz(m.CreatedAt),
 		}
 	}
 
@@ -1903,6 +1918,7 @@ func (h *Handler) ListTaskMessagesByUser(w http.ResponseWriter, r *http.Request)
 			Content: m.Content.String,
 			Input:   input,
 			Output:  m.Output.String,
+				CreatedAt: formatPgTimestamptz(m.CreatedAt),
 		}
 	}
 

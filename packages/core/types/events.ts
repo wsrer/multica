@@ -205,6 +205,8 @@ export interface TaskMessagePayload {
   content?: string;
   input?: Record<string, unknown>;
   output?: string;
+  meta?: Record<string, unknown>;
+  created_at?: string;
 }
 
 export interface TaskQueuedPayload {
