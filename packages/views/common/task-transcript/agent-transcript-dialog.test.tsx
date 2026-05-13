@@ -49,20 +49,13 @@ function baseTask(): AgentTask {
     runtime_id: "runtime-1",
     issue_id: "issue-1",
     status: "completed",
+    priority: 1,
     created_at: "2026-05-13T00:00:00Z",
     started_at: "2026-05-13T00:00:10Z",
     completed_at: "2026-05-13T00:00:20Z",
-    session_id: null,
+    dispatched_at: "2026-05-13T00:00:00Z",
     result: null,
-    work_dir: null,
-    dispatch_after: null,
-    dispatch_attempts: 0,
-    dispatched_at: null,
-    trigger_comment_id: null,
-    trigger_summary: null,
-    trigger_author_type: null,
-    trigger_author_name: null,
-    force_fresh_session: false,
+    error: null,
   };
 }
 
