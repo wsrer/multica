@@ -30,6 +30,11 @@ import { ActorAvatar } from "../../common/actor-avatar";
 import { StatusIcon } from "../../issues/components/status-icon";
 import { useT } from "../../i18n";
 import { Badge } from "@multica/ui/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@multica/ui/components/ui/tooltip";
 import type { IssueStatus } from "@multica/core/types";
 import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import {
@@ -255,7 +260,7 @@ export const MentionList = forwardRef<MentionListRef, MentionListProps>(
     let globalIndex = 0;
 
     return (
-      <div className="rounded-md border bg-popover py-1 shadow-md w-72 max-h-[300px] overflow-y-auto">
+      <div className="rounded-md border bg-popover py-1 shadow-md w-96 max-h-[300px] overflow-y-auto">
         {groups.map((group) => (
           <div key={group.label}>
             <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
@@ -313,11 +318,26 @@ function MentionRow({
         )}
         <span className="shrink-0 text-muted-foreground">{item.label}</span>
         {item.description && (
-          <span
-            className={`truncate text-muted-foreground ${isClosed ? "line-through" : ""}`}
-          >
-            {item.description}
-          </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  className={`min-w-0 flex-1 truncate text-muted-foreground ${
+                    isClosed ? "line-through" : ""
+                  }`}
+                >
+                  {item.description}
+                </span>
+              }
+            />
+            <TooltipContent
+              align="start"
+              className="z-[60]"
+              positionerClassName="z-[70]"
+            >
+              {item.description}
+            </TooltipContent>
+          </Tooltip>
         )}
       </button>
     );
