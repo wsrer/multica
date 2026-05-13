@@ -579,6 +579,37 @@ interface TranscriptEventRowProps {
   isSelected: boolean;
 }
 
+interface ToolUseDiffPayload {
+  filePath?: string;
+  oldText?: string;
+  newText?: string;
+}
+
+function toolUseDiffPayload(input: Record<string, unknown> | undefined): ToolUseDiffPayload | null {
+  if (!input) return null;
+
+  const filePath =
+    (typeof input.file_path === "string" && input.file_path) ||
+    (typeof input.path === "string" && input.path) ||
+    undefined;
+
+  const oldText = typeof input.old_text === "string"
+    ? input.old_text
+    : typeof input.old_string === "string"
+      ? input.old_string
+      : undefined;
+  const newText = typeof input.new_text === "string"
+    ? input.new_text
+    : typeof input.new_string === "string"
+      ? input.new_string
+      : typeof input.content === "string"
+        ? input.content
+        : undefined;
+
+  if (oldText == null && newText == null) return null;
+  return { filePath, oldText, newText };
+}
+
 const TranscriptEventRow = ({
   ref,
   item,
@@ -588,14 +619,12 @@ const TranscriptEventRow = ({
   const color = getEventColor(item);
   const label = getEventLabel(item);
   const summary = getEventSummary(item);
+  const parsedToolUseDiff =
+    item.type === "tool_use" && isEditTool(item.tool) && item.input
+      ? toolUseDiffPayload(item.input)
+      : null;
   const toolUseHasInlineDiff =
-    item.type === "tool_use" &&
-    isEditTool(item.tool) &&
-    item.input != null &&
-    (
-      typeof item.input.old_text === "string" ||
-      typeof item.input.new_text === "string"
-    );
+    item.type === "tool_use" && parsedToolUseDiff != null;
 
   const hasDetail =
     (item.type === "tool_use" && (
@@ -682,10 +711,9 @@ function EventDetailContent({ item }: { item: TimelineItem }) {
   switch (item.type) {
     case "tool_use": {
       if (isEditTool(item.tool) && item.input) {
-        const oldText = typeof item.input.old_text === "string" ? item.input.old_text : undefined;
-        const newText = typeof item.input.new_text === "string" ? item.input.new_text : undefined;
-        if (oldText != null || newText != null) {
-          return <DiffViewer oldText={oldText} newText={newText} />;
+        const parsed = toolUseDiffPayload(item.input);
+        if (parsed) {
+          return <DiffViewer oldText={parsed.oldText} newText={parsed.newText} filePath={parsed.filePath} />;
         }
       }
       return (

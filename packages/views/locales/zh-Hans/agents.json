@@ -342,6 +342,8 @@
     "file_content": "文件内容",
     "diff_unified": "统一差异",
     "diff_split": "拆分差异",
+    "switch_to_diff_unified": "切换到统一差异视图",
+    "switch_to_diff_split": "切换到拆分差异视图",
     "no_visual_diff": "该次文件修改未提供可视化差异。",
     "show_all_lines": "显示全部 {{count}} 行",
     "collapse": "收起",

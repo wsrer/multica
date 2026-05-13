@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { I18nProvider } from "@multica/core/i18n/react";
 import enCommon from "../../locales/en/common.json";
@@ -36,8 +36,9 @@ describe("DiffViewer", () => {
       { wrapper: I18nWrapper },
     );
 
-    expect(screen.getByText("Unified")).toBeInTheDocument();
-    expect(screen.getByText("Split")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Switch to split diff view" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("-old line")).toBeInTheDocument();
     expect(screen.getByText("+new line")).toBeInTheDocument();
     expect(screen.queryByText("old line")).not.toBeInTheDocument();
@@ -56,8 +57,37 @@ describe("DiffViewer", () => {
       />,
       { wrapper: I18nWrapper },
     );
+    expect(
+      screen.getByRole("button", { name: "Switch to unified diff view" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("old line")).toBeInTheDocument();
     expect(screen.getByText("new line")).toBeInTheDocument();
+  });
+
+  it("switches mode when clicking the toggle", () => {
+    render(
+      <DiffViewer
+        output={[
+          "--- a/file.txt",
+          "+++ b/file.txt",
+          "@@ -1 +1 @@",
+          "-old line",
+          "+new line",
+        ].join("\n")}
+      />,
+      { wrapper: I18nWrapper },
+    );
+
+    expect(screen.getByText("-old line")).toBeInTheDocument();
+    expect(screen.queryByText("old line")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to split diff view" }));
+
+    expect(screen.getByText("old line")).toBeInTheDocument();
+    expect(screen.getByText("new line")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Switch to unified diff view" }),
+    ).toBeInTheDocument();
   });
 
   it("shows placeholder when no visual diff can be parsed", () => {

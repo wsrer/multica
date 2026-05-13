@@ -1,8 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronUp, Copy } from "lucide-react";
-import { ToggleGroup, ToggleGroupItem } from "@multica/ui/components/ui/toggle-group";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  SquareSplitHorizontal,
+  SquareSplitVertical,
+} from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@multica/ui/components/ui/tooltip";
 import { useT } from "../../i18n";
 
 type DiffViewMode = "unified" | "split";
@@ -11,6 +22,7 @@ interface DiffViewerProps {
   output?: string;
   oldText?: string;
   newText?: string;
+  filePath?: string;
   defaultMode?: DiffViewMode;
 }
 
@@ -49,12 +61,13 @@ function parseUnifiedDiff(text: string): DiffLine[] {
   return lines;
 }
 
-function buildDiffFromOldNew(oldText: string, newText: string): string {
+function buildDiffFromOldNew(oldText: string, newText: string, filePath?: string): string {
   const oldLines = oldText.split("\n");
   const newLines = newText.split("\n");
+  const path = filePath ?? "file";
   const lines: string[] = [
-    "--- a/file",
-    "+++ b/file",
+    `--- ${path}`,
+    `+++ ${path}`,
     `@@ -1,${oldLines.length} +1,${newLines.length} @@`,
     ...oldLines.map((line) => `-${line}`),
     ...newLines.map((line) => `+${line}`),
@@ -132,23 +145,24 @@ export function DiffViewer({
   output,
   oldText,
   newText,
+  filePath,
   defaultMode = "unified",
 }: DiffViewerProps) {
   const { t } = useT("agents");
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<DiffViewMode>(defaultMode);
+  const nextMode: DiffViewMode = mode === "unified" ? "split" : "unified";
 
   const diffText = useMemo(() => {
-    if (output && output.length > 0) return output;
     if (oldText != null || newText != null) {
-      return buildDiffFromOldNew(oldText ?? "", newText ?? "");
+      return buildDiffFromOldNew(oldText ?? "", newText ?? "", filePath);
     }
+    if (output && output.length > 0) return output;
     return "";
-  }, [output, oldText, newText]);
+  }, [output, oldText, newText, filePath]);
 
   const lines = useMemo(() => parseUnifiedDiff(diffText), [diffText]);
-  const hasVisualDiff = lines.some((line) => line.type === "add" || line.type === "del");
   const hasDiffStructure = lines.some(
     (line) =>
       line.type === "add" ||
@@ -156,6 +170,10 @@ export function DiffViewer({
       line.type === "file" ||
       line.type === "hunk",
   );
+  const toggleDiffLabel =
+    nextMode === "split"
+      ? t(($) => $.transcript.switch_to_diff_split)
+      : t(($) => $.transcript.switch_to_diff_unified);
   const isLong = lines.length > 100;
   const displayLines = expanded || !isLong ? lines : lines.slice(0, 100);
   const splitRows = useMemo(() => buildSplitRows(displayLines), [displayLines]);
@@ -174,24 +192,21 @@ export function DiffViewer({
           {hasDiffStructure ? t(($) => $.transcript.file_changes) : t(($) => $.transcript.file_content)}
         </span>
         <div className="flex items-center gap-1.5">
-          <ToggleGroup
-            type="single"
-            value={mode}
-            onValueChange={(value) => {
-              if (value === "unified" || value === "split") setMode(value);
-            }}
-            size="sm"
-            variant="outline"
-            spacing={0}
-            aria-label={t(($) => $.transcript.file_changes)}
-          >
-            <ToggleGroupItem value="unified" aria-label={t(($) => $.transcript.diff_unified)} className="px-2 text-[10px]">
-              {t(($) => $.transcript.diff_unified)}
-            </ToggleGroupItem>
-            <ToggleGroupItem value="split" aria-label={t(($) => $.transcript.diff_split)} className="px-2 text-[10px]">
-              {t(($) => $.transcript.diff_split)}
-            </ToggleGroupItem>
-          </ToggleGroup>
+          <Tooltip>
+            <TooltipTrigger
+              render={<button type="button" />}
+              aria-label={toggleDiffLabel}
+              className="flex size-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() => setMode(nextMode)}
+            >
+              {nextMode === "split" ? (
+                <SquareSplitVertical className="size-3.5" />
+              ) : (
+                <SquareSplitHorizontal className="size-3.5" />
+              )}
+            </TooltipTrigger>
+            <TooltipContent>{toggleDiffLabel}</TooltipContent>
+          </Tooltip>
           <button
             type="button"
             className="text-muted-foreground transition-colors hover:text-foreground"
