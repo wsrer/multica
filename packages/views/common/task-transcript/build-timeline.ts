@@ -49,19 +49,22 @@ export function isEditTool(tool?: string): boolean {
 
 export function looksLikeUnifiedDiff(output?: string): boolean {
   if (!output) return false;
-  let hasFileHeader = false;
+  let hasOldFileHeader = false;
+  let hasNewFileHeader = false;
   let hasHunk = false;
   let hasChangeLine = false;
 
   for (const line of output.split("\n")) {
-    if (line.startsWith("--- ") || line.startsWith("+++ ")) hasFileHeader = true;
+    if (line.startsWith("--- ")) hasOldFileHeader = true;
+    if (line.startsWith("+++ ")) hasNewFileHeader = true;
     if (line.startsWith("@@ ")) hasHunk = true;
     if ((line.startsWith("+") && !line.startsWith("+++ ")) || (line.startsWith("-") && !line.startsWith("--- "))) {
       hasChangeLine = true;
     }
   }
 
-  return hasChangeLine && (hasFileHeader || hasHunk);
+  if (hasOldFileHeader && hasNewFileHeader) return true;
+  return hasChangeLine && hasHunk;
 }
 
 /** Build a chronologically ordered timeline from raw task messages. */

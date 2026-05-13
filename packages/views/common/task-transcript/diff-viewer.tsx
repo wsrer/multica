@@ -149,6 +149,13 @@ export function DiffViewer({
 
   const lines = useMemo(() => parseUnifiedDiff(diffText), [diffText]);
   const hasVisualDiff = lines.some((line) => line.type === "add" || line.type === "del");
+  const hasDiffStructure = lines.some(
+    (line) =>
+      line.type === "add" ||
+      line.type === "del" ||
+      line.type === "file" ||
+      line.type === "hunk",
+  );
   const isLong = lines.length > 100;
   const displayLines = expanded || !isLong ? lines : lines.slice(0, 100);
   const splitRows = useMemo(() => buildSplitRows(displayLines), [displayLines]);
@@ -164,7 +171,7 @@ export function DiffViewer({
     <div className="overflow-hidden rounded">
       <div className="flex items-center justify-between border-b bg-muted/60 px-3 py-1.5">
         <span className="text-[10px] text-muted-foreground">
-          {hasVisualDiff ? t(($) => $.transcript.file_changes) : t(($) => $.transcript.file_content)}
+          {hasDiffStructure ? t(($) => $.transcript.file_changes) : t(($) => $.transcript.file_content)}
         </span>
         <div className="flex items-center gap-1.5">
           <ToggleGroup
@@ -195,7 +202,7 @@ export function DiffViewer({
         </div>
       </div>
 
-      {!hasVisualDiff ? (
+      {!hasDiffStructure ? (
         <div className="p-3 text-[11px] text-muted-foreground">
           {t(($) => $.transcript.no_visual_diff)}
         </div>

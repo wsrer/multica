@@ -1,6 +1,5 @@
 import { type ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { I18nProvider } from "@multica/core/i18n/react";
 import enCommon from "../../locales/en/common.json";
@@ -23,8 +22,7 @@ function I18nWrapper({ children }: { children: ReactNode }) {
 }
 
 describe("DiffViewer", () => {
-  it("renders unified diff and switches to split mode", async () => {
-    const user = userEvent.setup();
+  it("renders unified and split diff modes", () => {
     render(
       <DiffViewer
         output={[
@@ -42,9 +40,22 @@ describe("DiffViewer", () => {
     expect(screen.getByText("Split")).toBeInTheDocument();
     expect(screen.getByText("-old line")).toBeInTheDocument();
     expect(screen.getByText("+new line")).toBeInTheDocument();
+    expect(screen.queryByText("old line")).not.toBeInTheDocument();
+    expect(screen.queryByText("new line")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Split" }));
-
+    render(
+      <DiffViewer
+        output={[
+          "--- a/file.txt",
+          "+++ b/file.txt",
+          "@@ -1 +1 @@",
+          "-old line",
+          "+new line",
+        ].join("\n")}
+        defaultMode="split"
+      />,
+      { wrapper: I18nWrapper },
+    );
     expect(screen.getByText("old line")).toBeInTheDocument();
     expect(screen.getByText("new line")).toBeInTheDocument();
   });
@@ -55,5 +66,23 @@ describe("DiffViewer", () => {
     expect(
       screen.getByText("No visual diff available for this file change."),
     ).toBeInTheDocument();
+  });
+
+  it("renders simplified diff card for new-file headers without +/- hunks", () => {
+    render(
+      <DiffViewer
+        output={[
+          "--- src/new-file.ts",
+          "+++ src/new-file.ts",
+          "(new file, 42 bytes)",
+        ].join("\n")}
+      />,
+      { wrapper: I18nWrapper },
+    );
+
+    expect(screen.getByText("File changes")).toBeInTheDocument();
+    expect(screen.queryByText("No visual diff available for this file change.")).not.toBeInTheDocument();
+    expect(screen.getByText("--- src/new-file.ts")).toBeInTheDocument();
+    expect(screen.getByText("(new file, 42 bytes)")).toBeInTheDocument();
   });
 });

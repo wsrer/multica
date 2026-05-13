@@ -30,6 +30,15 @@ describe("looksLikeUnifiedDiff", () => {
     expect(looksLikeUnifiedDiff(diff)).toBe(true);
   });
 
+  it("returns true for new-file style diff headers without hunks", () => {
+    const headerOnly = [
+      "--- src/new-file.ts",
+      "+++ src/new-file.ts",
+      "(new file, 42 bytes)",
+    ].join("\n");
+    expect(looksLikeUnifiedDiff(headerOnly)).toBe(true);
+  });
+
   it("returns false for non-diff text", () => {
     expect(looksLikeUnifiedDiff("plain output")).toBe(false);
     expect(looksLikeUnifiedDiff("")).toBe(false);
