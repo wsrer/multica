@@ -386,6 +386,88 @@ func TestGetTaskStatus_WithDaemonToken_CrossWorkspace(t *testing.T) {
 	}
 }
 
+func TestTaskMessagesPreserveDaemonCreatedAt(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("database not available")
+	}
+
+	ctx := context.Background()
+	var issueID, agentID, runtimeID, taskID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type)
+		VALUES ($1, 'transcript created_at test issue', 'todo', 'medium', $2, 'member')
+		RETURNING id
+	`, testWorkspaceID, testUserID).Scan(&issueID); err != nil {
+		t.Fatalf("setup: create issue: %v", err)
+	}
+	t.Cleanup(func() {
+		testPool.Exec(ctx, `DELETE FROM issue WHERE id = $1`, issueID)
+	})
+
+	if err := testPool.QueryRow(ctx, `
+		SELECT a.id, a.runtime_id FROM agent a WHERE a.workspace_id = $1 LIMIT 1
+	`, testWorkspaceID).Scan(&agentID, &runtimeID); err != nil {
+		t.Fatalf("setup: get agent: %v", err)
+	}
+
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO agent_task_queue (agent_id, issue_id, status, runtime_id)
+		VALUES ($1, $2, 'running', $3)
+		RETURNING id
+	`, agentID, issueID, runtimeID).Scan(&taskID); err != nil {
+		t.Fatalf("setup: create task: %v", err)
+	}
+	t.Cleanup(func() {
+		testPool.Exec(ctx, `DELETE FROM agent_task_queue WHERE id = $1`, taskID)
+	})
+
+	msgCreatedAt := "2026-01-02T03:04:05.123456Z"
+	w := httptest.NewRecorder()
+	req := newDaemonTokenRequest("POST", "/api/daemon/tasks/"+taskID+"/messages", map[string]any{
+		"messages": []map[string]any{
+			{
+				"seq":        1,
+				"type":       "text",
+				"content":    "hello",
+				"created_at": msgCreatedAt,
+			},
+		},
+	}, testWorkspaceID, "legit-daemon")
+	req = withURLParams(req, "taskId", taskID)
+
+	testHandler.ReportTaskMessages(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("ReportTaskMessages: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequest("GET", "/api/tasks/"+taskID+"/messages", nil)
+	req = withURLParams(req, "taskId", taskID)
+	member, err := testHandler.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{
+		UserID:      parseUUID(testUserID),
+		WorkspaceID: parseUUID(testWorkspaceID),
+	})
+	if err != nil {
+		t.Fatalf("load member context: %v", err)
+	}
+	req = req.WithContext(middleware.SetMemberContext(req.Context(), testWorkspaceID, member))
+	testHandler.ListTaskMessagesByUser(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("ListTaskMessagesByUser: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var messages []protocol.TaskMessagePayload
+	if err := json.NewDecoder(w.Body).Decode(&messages); err != nil {
+		t.Fatalf("decode messages: %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("expected 1 task message, got %d", len(messages))
+	}
+	if messages[0].CreatedAt != msgCreatedAt {
+		t.Fatalf("created_at = %q, want %q", messages[0].CreatedAt, msgCreatedAt)
+	}
+}
+
 // TestGetTaskStatus_TransientDBError_Returns500 verifies that a transient DB
 // error from GetAgentTask is reported as 500 rather than 404. The daemon
 // uses 404+"task not found" as a hard cancel signal; a transient lookup

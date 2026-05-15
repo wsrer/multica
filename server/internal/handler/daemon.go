@@ -167,20 +167,6 @@ type daemonWorkspaceReposResponse struct {
 	ReposVersion string     `json:"repos_version"`
 }
 
-// normalizeRuntimeTimezone validates and normalizes the IANA timezone string
-// reported by a daemon during registration. The stored column is NOT NULL with
-// a 'UTC' default so any unparseable, blank, or trivially-invalid value is
-// quietly downgraded to "UTC" rather than rejected: a misconfigured daemon
-// host shouldn't take down registration just because its tz string is junk.
-// Real validation happens on the user-driven PATCH path where we surface the
-// error.
-func formatPgTimestamptz(ts pgtype.Timestamptz) string {
-	if !ts.Valid {
-		return ""
-	}
-	return ts.Time.Format(time.RFC3339)
-}
-
 func normalizeRuntimeTimezone(tz string) string {
 	tz = strings.TrimSpace(tz)
 	if tz == "" {
@@ -1643,17 +1629,37 @@ func (h *Handler) FailTask(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 type TaskMessageRequest struct {
-	Seq     int            `json:"seq"`
-	Type    string         `json:"type"`
-	Tool    string         `json:"tool,omitempty"`
-	Content string         `json:"content,omitempty"`
-	Input   map[string]any `json:"input,omitempty"`
-	Output  string         `json:"output,omitempty"`
-	Meta    map[string]any `json:"meta,omitempty"`
+	Seq       int            `json:"seq"`
+	Type      string         `json:"type"`
+	Tool      string         `json:"tool,omitempty"`
+	Content   string         `json:"content,omitempty"`
+	Input     map[string]any `json:"input,omitempty"`
+	Output    string         `json:"output,omitempty"`
+	Meta      map[string]any `json:"meta,omitempty"`
+	CreatedAt string         `json:"created_at,omitempty"`
 }
 
 type TaskMessageBatchRequest struct {
 	Messages []TaskMessageRequest `json:"messages"`
+}
+
+func parseTaskMessageCreatedAt(value string) pgtype.Timestamptz {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return pgtype.Timestamptz{}
+	}
+	t, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: t.UTC(), Valid: true}
+}
+
+func taskMessageCreatedAtToString(ts pgtype.Timestamptz) string {
+	if !ts.Valid {
+		return ""
+	}
+	return ts.Time.UTC().Format(time.RFC3339Nano)
 }
 
 // ReportTaskMessages receives a batch of agent execution messages from the daemon.
@@ -1698,14 +1704,15 @@ func (h *Handler) ReportTaskMessages(w http.ResponseWriter, r *http.Request) {
 		if msg.Input != nil {
 			inputJSON, _ = json.Marshal(msg.Input)
 		}
-dbMsg, err := h.Queries.CreateTaskMessage(r.Context(), db.CreateTaskMessageParams{
-			TaskID:  parseUUID(taskID),
-			Seq:     int32(msg.Seq),
-			Type:    msg.Type,
-			Tool:    pgtype.Text{String: msg.Tool, Valid: msg.Tool != ""},
-			Content: pgtype.Text{String: msg.Content, Valid: msg.Content != ""},
-			Input:   inputJSON,
-			Output:  pgtype.Text{String: msg.Output, Valid: msg.Output != ""},
+		dbMsg, err := h.Queries.CreateTaskMessage(r.Context(), db.CreateTaskMessageParams{
+			TaskID:    parseUUID(taskID),
+			Seq:       int32(msg.Seq),
+			Type:      msg.Type,
+			Tool:      pgtype.Text{String: msg.Tool, Valid: msg.Tool != ""},
+			Content:   pgtype.Text{String: msg.Content, Valid: msg.Content != ""},
+			Input:     inputJSON,
+			Output:    pgtype.Text{String: msg.Output, Valid: msg.Output != ""},
+			CreatedAt: parseTaskMessageCreatedAt(msg.CreatedAt),
 		})
 		if err != nil {
 			slog.Error("failed to persist task message", "task_id", taskID, "error", err)
@@ -1714,16 +1721,16 @@ dbMsg, err := h.Queries.CreateTaskMessage(r.Context(), db.CreateTaskMessageParam
 
 		if workspaceID != "" {
 			h.publishTask(protocol.EventTaskMessage, workspaceID, "system", "", taskID, protocol.TaskMessagePayload{
-				TaskID:  taskID,
-				IssueID: uuidToString(task.IssueID),
-				Seq:     msg.Seq,
-				Type:    msg.Type,
-				Tool:    msg.Tool,
-				Content: msg.Content,
-				Input:   msg.Input,
-				Output:  msg.Output,
-				Meta:    msg.Meta,
-				CreatedAt: dbMsg.CreatedAt.Time.Format(time.RFC3339),
+				TaskID:    taskID,
+				IssueID:   uuidToString(task.IssueID),
+				Seq:       msg.Seq,
+				Type:      msg.Type,
+				Tool:      msg.Tool,
+				Content:   msg.Content,
+				Input:     msg.Input,
+				Output:    msg.Output,
+				Meta:      msg.Meta,
+				CreatedAt: taskMessageCreatedAtToString(dbMsg.CreatedAt),
 			})
 		}
 	}
@@ -1772,15 +1779,15 @@ func (h *Handler) ListTaskMessages(w http.ResponseWriter, r *http.Request) {
 			json.Unmarshal(m.Input, &input)
 		}
 		resp[i] = protocol.TaskMessagePayload{
-			TaskID:  taskID,
-			IssueID: issueID,
-			Seq:     int(m.Seq),
-			Type:    m.Type,
-			Tool:    m.Tool.String,
-			Content: m.Content.String,
-			Input:   input,
-			Output:  m.Output.String,
-				CreatedAt: formatPgTimestamptz(m.CreatedAt),
+			TaskID:    taskID,
+			IssueID:   issueID,
+			Seq:       int(m.Seq),
+			Type:      m.Type,
+			Tool:      m.Tool.String,
+			Content:   m.Content.String,
+			Input:     input,
+			Output:    m.Output.String,
+			CreatedAt: taskMessageCreatedAtToString(m.CreatedAt),
 		}
 	}
 
@@ -1910,15 +1917,15 @@ func (h *Handler) ListTaskMessagesByUser(w http.ResponseWriter, r *http.Request)
 			json.Unmarshal(m.Input, &input)
 		}
 		resp[i] = protocol.TaskMessagePayload{
-			TaskID:  taskID,
-			IssueID: issueID,
-			Seq:     int(m.Seq),
-			Type:    m.Type,
-			Tool:    m.Tool.String,
-			Content: m.Content.String,
-			Input:   input,
-			Output:  m.Output.String,
-				CreatedAt: formatPgTimestamptz(m.CreatedAt),
+			TaskID:    taskID,
+			IssueID:   issueID,
+			Seq:       int(m.Seq),
+			Type:      m.Type,
+			Tool:      m.Tool.String,
+			Content:   m.Content.String,
+			Input:     input,
+			Output:    m.Output.String,
+			CreatedAt: taskMessageCreatedAtToString(m.CreatedAt),
 		}
 	}
 

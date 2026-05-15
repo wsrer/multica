@@ -942,6 +942,80 @@ func TestExecuteAndDrain_CodexInactivityReportsToolResultTranscript(t *testing.T
 	}
 }
 
+type transcriptMessagesBackend struct{}
+
+func (transcriptMessagesBackend) Execute(_ context.Context, _ string, _ agent.ExecOptions) (*agent.Session, error) {
+	msgCh := make(chan agent.Message, 4)
+	resCh := make(chan agent.Result, 1)
+	go func() {
+		msgCh <- agent.Message{Type: agent.MessageThinking, Content: "thinking"}
+		msgCh <- agent.Message{Type: agent.MessageText, Content: "hello"}
+		msgCh <- agent.Message{Type: agent.MessageToolUse, Tool: "exec_command", Input: map[string]any{"command": "pwd"}}
+		msgCh <- agent.Message{Type: agent.MessageError, Content: "boom"}
+		close(msgCh)
+		time.Sleep(50 * time.Millisecond)
+		resCh <- agent.Result{Status: "completed", Output: "done"}
+	}()
+	return &agent.Session{Messages: msgCh, Result: resCh}, nil
+}
+
+func TestExecuteAndDrainReportsCreatedAtForTranscriptMessages(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var reported []TaskMessageData
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/daemon/tasks/task-created-at/messages" {
+			http.NotFound(w, r)
+			return
+		}
+		var body struct {
+			Messages []TaskMessageData `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode task messages: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		reported = append(reported, body.Messages...)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	d := &Daemon{client: NewClient(srv.URL), logger: slog.Default()}
+	result, _, err := d.executeAndDrain(context.Background(), transcriptMessagesBackend{}, "prompt", agent.ExecOptions{}, slog.Default(), "task-created-at")
+	if err != nil {
+		t.Fatalf("executeAndDrain: %v", err)
+	}
+	if result.Status != "completed" {
+		t.Fatalf("expected completed result, got %q", result.Status)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		got := append([]TaskMessageData(nil), reported...)
+		mu.Unlock()
+		if len(got) >= 4 {
+			for _, msg := range got {
+				if msg.CreatedAt == "" {
+					t.Fatalf("message seq=%d type=%s missing created_at: %+v", msg.Seq, msg.Type, got)
+				}
+				if _, err := time.Parse(time.RFC3339Nano, msg.CreatedAt); err != nil {
+					t.Fatalf("message seq=%d created_at %q is not RFC3339Nano: %v", msg.Seq, msg.CreatedAt, err)
+				}
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected at least 4 transcript messages, got %+v", got)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // blockingBackend returns a Session whose Result channel is never written to,
 // so executeAndDrain can only exit via the drainCtx.Done() path.
 type blockingBackend struct{}

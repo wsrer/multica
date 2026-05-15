@@ -348,6 +348,7 @@
     "copy_all": "Copy all",
     "copy_filtered": "Copy filtered",
     "copied": "Copied",
+    "export": "Export",
     "waiting_events": "Waiting for events...",
     "no_data": "No execution data recorded."
   },

@@ -2362,28 +2362,37 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 		var mu sync.Mutex
 		var pendingText strings.Builder
 		var pendingThinking strings.Builder
+		var pendingTextCreatedAt string
+		var pendingThinkingCreatedAt string
 		var batch []TaskMessageData
 		callIDToTool := map[string]string{}
+		nowTranscriptTime := func() string {
+			return time.Now().UTC().Format(time.RFC3339Nano)
+		}
 
 		flush := func() {
 			mu.Lock()
 			if pendingThinking.Len() > 0 {
 				s := seq.Add(1)
 				batch = append(batch, TaskMessageData{
-					Seq:     int(s),
-					Type:    "thinking",
-					Content: pendingThinking.String(),
+					Seq:       int(s),
+					Type:      "thinking",
+					Content:   pendingThinking.String(),
+					CreatedAt: pendingThinkingCreatedAt,
 				})
 				pendingThinking.Reset()
+				pendingThinkingCreatedAt = ""
 			}
 			if pendingText.Len() > 0 {
 				s := seq.Add(1)
 				batch = append(batch, TaskMessageData{
-					Seq:     int(s),
-					Type:    "text",
-					Content: pendingText.String(),
+					Seq:       int(s),
+					Type:      "text",
+					Content:   pendingText.String(),
+					CreatedAt: pendingTextCreatedAt,
 				})
 				pendingText.Reset()
+				pendingTextCreatedAt = ""
 			}
 			toSend := batch
 			batch = nil
@@ -2450,10 +2459,11 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 					s := seq.Add(1)
 					mu.Lock()
 					batch = append(batch, TaskMessageData{
-						Seq:   int(s),
-						Type:  "tool_use",
-						Tool:  msg.Tool,
-						Input: msg.Input,
+						Seq:       int(s),
+						Type:      "tool_use",
+						Tool:      msg.Tool,
+						Input:     msg.Input,
+						CreatedAt: nowTranscriptTime(),
 					})
 					mu.Unlock()
 				case agent.MessageToolResult:
@@ -2471,15 +2481,19 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 					taskLog.Info("tool_result observed", "seq", s, "tool", toolName, "call_id", msg.CallID)
 					mu.Lock()
 					batch = append(batch, TaskMessageData{
-						Seq:    int(s),
-						Type:   "tool_result",
-						Tool:   toolName,
-						Output: output,
+						Seq:       int(s),
+						Type:      "tool_result",
+						Tool:      toolName,
+						Output:    output,
+						CreatedAt: nowTranscriptTime(),
 					})
 					mu.Unlock()
 				case agent.MessageThinking:
 					if msg.Content != "" {
 						mu.Lock()
+						if pendingThinkingCreatedAt == "" {
+							pendingThinkingCreatedAt = nowTranscriptTime()
+						}
 						pendingThinking.WriteString(msg.Content)
 						mu.Unlock()
 					}
@@ -2487,6 +2501,9 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 					if msg.Content != "" {
 						taskLog.Debug("agent", "text", truncateLog(msg.Content, 200))
 						mu.Lock()
+						if pendingTextCreatedAt == "" {
+							pendingTextCreatedAt = nowTranscriptTime()
+						}
 						pendingText.WriteString(msg.Content)
 						mu.Unlock()
 					}
@@ -2495,9 +2512,10 @@ func (d *Daemon) executeAndDrain(ctx context.Context, backend agent.Backend, pro
 					s := seq.Add(1)
 					mu.Lock()
 					batch = append(batch, TaskMessageData{
-						Seq:     int(s),
-						Type:    "error",
-						Content: msg.Content,
+						Seq:       int(s),
+						Type:      "error",
+						Content:   msg.Content,
+						CreatedAt: nowTranscriptTime(),
 					})
 					mu.Unlock()
 				}

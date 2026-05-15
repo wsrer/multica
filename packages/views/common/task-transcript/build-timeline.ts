@@ -10,7 +10,7 @@ export interface TimelineItem {
   input?: Record<string, unknown>;
   output?: string;
   meta?: Record<string, unknown>;
-  created_at?: string;
+  created_at: string;
 }
 
 /** Tool names that execute shell commands. */
@@ -42,7 +42,7 @@ export function buildTimeline(msgs: TaskMessagePayload[]): TimelineItem[] {
       input: msg.input,
       output: msg.output ? redactSecrets(msg.output) : msg.output,
       meta: msg.meta,
-      created_at: msg.created_at,
+      created_at: msg.created_at ?? "",
     });
   }
   return items.sort((a, b) => a.seq - b.seq);

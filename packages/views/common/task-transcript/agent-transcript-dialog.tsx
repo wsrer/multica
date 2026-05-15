@@ -17,6 +17,7 @@ import {
   Cloud,
   Cpu,
   Filter,
+  Download,
 } from "lucide-react";
 import { cn } from "@multica/ui/lib/utils";
 import { Dialog, DialogContent, DialogTitle } from "@multica/ui/components/ui/dialog";
@@ -146,11 +147,60 @@ function formatDuration(start: string, end: string): string {
 }
 
 function formatElapsedMs(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
+  const safeMs = Math.max(0, Math.floor(ms));
+  if (safeMs < 1000) return `${safeMs}ms`;
+  const seconds = Math.floor(safeMs / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${minutes}m ${secs}s`;
+}
+
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function normalizeTimestampValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    // Heuristic: treat small numbers as Unix seconds.
+    const ms = value < 1e12 ? value * 1000 : value;
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const n = Number(trimmed);
+    if (!Number.isFinite(n)) return null;
+    return n < 1e12 ? n * 1000 : n;
+  }
+  const ts = new Date(trimmed).getTime();
+  return Number.isFinite(ts) ? ts : null;
+}
+
+function resolveItemTimestampMs(item: TimelineItem): number | null {
+  const direct = normalizeTimestampValue(item.created_at);
+  if (direct !== null) return direct;
+  const meta = item.meta;
+  if (!meta) return null;
+  return (
+    normalizeTimestampValue(meta.created_at) ??
+    normalizeTimestampValue(meta.timestamp) ??
+    normalizeTimestampValue(meta.at) ??
+    null
+  );
+}
+
+function formatTimestampFromItem(item: TimelineItem): string {
+  const ts = resolveItemTimestampMs(item);
+  if (ts === null) return "";
+  return formatTimestamp(new Date(ts).toISOString());
+}
+
+function parseItemTimestamp(item: TimelineItem): number | null {
+  return resolveItemTimestampMs(item);
 }
 
 // ─── Main dialog ────────────────────────────────────────────────────────────
@@ -255,6 +305,36 @@ export function AgentTranscriptDialog({
       setTimeout(() => setCopied(false), 2000);
     });
   }, [filteredItems]);
+
+  // Export filtered items as a JSON file
+  const handleExport = useCallback(() => {
+    const data = {
+      taskId: task.id,
+      agentName,
+      status: task.status,
+      startedAt: task.started_at ?? null,
+      completedAt: task.completed_at ?? null,
+      duration:
+        task.started_at && task.completed_at
+          ? formatDuration(task.started_at, task.completed_at)
+          : null,
+      exportedAt: new Date().toISOString(),
+      totalCount: filteredItems.length,
+      items: filteredItems,
+    };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const date = new Date().toISOString().slice(0, 10);
+    const safeName = agentName.replace(/[^a-zA-Z0-9_-]/g, "_");
+    a.download = `transcript-${safeName}-${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [filteredItems, task, agentName]);
 
   // Toggle tool filter
   const toggleTool = useCallback((tool: string) => {
@@ -375,6 +455,13 @@ export function AgentTranscriptDialog({
                 {copied ? t(($) => $.transcript.copied) : selectedTools.size > 0 ? t(($) => $.transcript.copy_filtered) : t(($) => $.transcript.copy_all)}
               </button>
               <button
+                onClick={handleExport}
+                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              >
+                <Download className="h-3 w-3" />
+                {t(($) => $.transcript.export)}
+              </button>
+              <button
                 onClick={() => onOpenChange(false)}
                 className="flex items-center justify-center rounded p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               >
@@ -469,18 +556,23 @@ export function AgentTranscriptDialog({
             </div>
           ) : (
             <div className="divide-y">
-              {filteredItems.map((item) => (
+              {(() => {
+                const showTimestampColumn = filteredItems.some((it) => parseItemTimestamp(it) !== null);
+                return filteredItems.map((item, index) => (
                 <TranscriptEventRow
                   key={item.seq}
                   ref={(el) => {
                     if (el) eventRefs.current.set(item.seq, el);
                     else eventRefs.current.delete(item.seq);
                   }}
+                  index={index}
                   item={item}
+                  prevItem={index > 0 ? filteredItems[index - 1] : undefined}
+                  showTimestampColumn={showTimestampColumn}
                   isSelected={selectedSeq === item.seq}
-                  taskStartedAt={task.started_at ?? task.created_at}
                 />
-              ))}
+                ));
+              })()}
             </div>
           )}
         </div>
@@ -575,21 +667,32 @@ function TimelineBar({
 // ─── Transcript event row ───────────────────────────────────────────────────
 
 interface TranscriptEventRowProps {
+  index: number;
   item: TimelineItem;
+  prevItem?: TimelineItem;
+  showTimestampColumn: boolean;
   isSelected: boolean;
-  taskStartedAt: string;
 }
 
 const TranscriptEventRow = ({
   ref,
+  index,
   item,
+  prevItem,
+  showTimestampColumn,
   isSelected,
-  taskStartedAt,
 }: TranscriptEventRowProps & { ref?: React.Ref<HTMLDivElement> }) => {
   const [expanded, setExpanded] = useState(false);
   const color = getEventColor(item);
   const label = getEventLabel(item);
   const summary = getEventSummary(item);
+  const createdTs = parseItemTimestamp(item);
+  const prevTs = prevItem ? parseItemTimestamp(prevItem) : null;
+  const stepElapsed =
+    index > 0 && createdTs !== null && prevTs !== null
+      ? formatElapsedMs(Math.max(0, createdTs - prevTs)) + " "
+      : "";
+  const rowTimestamp = createdTs !== null ? formatTimestampFromItem(item) : "";
 
   const hasDetail =
     (item.type === "tool_use" && item.input && Object.keys(item.input).length > 0) ||
@@ -608,6 +711,13 @@ const TranscriptEventRow = ({
     >
       <Collapsible open={expanded} onOpenChange={setExpanded}>
         <div className="flex items-start gap-2 px-4 py-2">
+          {/* Timestamp */}
+          {showTimestampColumn && (
+            <span className="shrink-0 text-[10px] text-muted-foreground/50 tabular-nums mt-1 w-14 text-right">
+              {rowTimestamp || null}
+            </span>
+          )}
+
           {/* Type label badge */}
           <span
             className={cn(
@@ -644,10 +754,8 @@ const TranscriptEventRow = ({
 
           {/* Elapsed time + seq */}
           <span className="shrink-0 text-[10px] text-muted-foreground/50 tabular-nums mt-1">
-            {item.created_at
-              ? formatElapsedMs(new Date(item.created_at).getTime() - new Date(taskStartedAt).getTime())
-              : null}
-            {item.created_at && " "}#{item.seq}
+            {stepElapsed}
+            #{item.seq}
           </span>
         </div>
 
@@ -655,7 +763,7 @@ const TranscriptEventRow = ({
         {hasDetail && (
           <CollapsibleContent>
             <div className="px-4 pb-3">
-              <div className="ml-[72px] rounded bg-muted/40 border">
+              <div className={cn("rounded bg-muted/40 border", showTimestampColumn ? "ml-[72px]" : "ml-[12px]")}>
                 <EventDetailContent item={item} />
               </div>
             </div>

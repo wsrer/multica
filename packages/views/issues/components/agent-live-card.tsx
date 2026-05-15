@@ -127,12 +127,11 @@ export function AgentLiveCard({ issueId }: AgentLiveCardProps) {
             next.set(task.id, { task: existing.task, items: merged });
             return next;
           });
-        }).catch((e) => {
+        }).catch(() => {
           hydratedTaskIds.current.delete(task.id);
-          console.error(e);
         });
       }
-    }).catch(console.error);
+    }).catch(() => {});
   }, [issueId]);
 
   // Initial fetch on mount / issueId change.
@@ -162,6 +161,8 @@ export function AgentLiveCard({ issueId }: AgentLiveCardProps) {
         content: msg.content,
         input: msg.input,
         output: msg.output,
+        meta: msg.meta,
+        created_at: msg.created_at ?? "",
       };
 
       setTaskStates((prev) => {
