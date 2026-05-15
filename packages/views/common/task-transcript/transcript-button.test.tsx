@@ -97,6 +97,7 @@ const items: TimelineItem[] = [
     seq: 1,
     type: "text",
     content: "hello world",
+    created_at: "2026-05-15T10:00:07.000Z",
   },
 ];
 
