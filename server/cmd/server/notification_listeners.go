@@ -89,7 +89,7 @@ var notifTypeToGroup = map[string]string{
 	"task_completed":  "agent_activity",
 	"task_failed":     "agent_activity",
 	"agent_blocked":   "agent_activity",
-	"agent_completed": "agent_activity",
+	"agent_completed":  "agent_activity",
 }
 
 // isNotifMuted returns true if the given notification type is muted for a user
@@ -338,7 +338,7 @@ func notifyIssueSubscribers(
 			Title:         title,
 			Body:          util.StrToText(body),
 			ActorType:     util.StrToText(e.ActorType),
-			ActorID:       parseUUID(e.ActorID),
+			ActorID:       optionalUUID(e.ActorID),
 			Details:       details,
 		})
 		if err != nil {
@@ -348,7 +348,7 @@ func notifyIssueSubscribers(
 		}
 
 		notified[subID] = true
-		resp := inboxItemToResponse(item)
+		resp := inboxItemToResponse(ctx, queries, item)
 		resp["issue_status"] = issueStatus
 		bus.Publish(events.Event{
 			Type:        protocol.EventInboxNew,
@@ -403,7 +403,7 @@ func notifyDirect(
 		Title:         title,
 		Body:          util.StrToText(body),
 		ActorType:     util.StrToText(e.ActorType),
-		ActorID:       parseUUID(e.ActorID),
+		ActorID:       optionalUUID(e.ActorID),
 		Details:       details,
 	})
 	if err != nil {
@@ -412,7 +412,7 @@ func notifyDirect(
 		return
 	}
 
-	resp := inboxItemToResponse(item)
+	resp := inboxItemToResponse(ctx, queries, item)
 	resp["issue_status"] = issueStatus
 	bus.Publish(events.Event{
 		Type:        protocol.EventInboxNew,
@@ -442,6 +442,7 @@ func notifyMentionedMembers(
 	recipientIDs := map[string]bool{}
 
 	hasAll := false
+	var squadIDs []string
 	for _, m := range mentions {
 		if m.Type == "all" {
 			hasAll = true
@@ -449,6 +450,29 @@ func notifyMentionedMembers(
 		}
 		if m.Type == "member" {
 			recipientIDs[m.ID] = true
+		}
+		if m.Type == "squad" {
+			squadIDs = append(squadIDs, m.ID)
+		}
+	}
+
+	// Expand each @squad mention to its human members. Agent members of a
+	// squad are reached via comment-trigger / assignment paths, not the
+	// mention-inbox path, so we only seed member-typed recipients here.
+	for _, sid := range squadIDs {
+		squadUUID, err := util.ParseUUID(sid)
+		if err != nil {
+			continue
+		}
+		members, err := queries.ListSquadMembers(context.Background(), squadUUID)
+		if err != nil {
+			slog.Error("failed to list squad members for @squad mention", "squad_id", sid, "error", err)
+			continue
+		}
+		for _, sm := range members {
+			if sm.MemberType == "member" {
+				recipientIDs[util.UUIDToString(sm.MemberID)] = true
+			}
 		}
 	}
 
@@ -490,14 +514,14 @@ func notifyMentionedMembers(
 			IssueID:       parseUUID(issueID),
 			Title:         title,
 			ActorType:     util.StrToText(e.ActorType),
-			ActorID:       parseUUID(e.ActorID),
+			ActorID:       optionalUUID(e.ActorID),
 			Details:       details,
 		})
 		if err != nil {
 			slog.Error("mention inbox creation failed", "mentioned_id", id, "error", err)
 			continue
 		}
-		resp := inboxItemToResponse(item)
+		resp := inboxItemToResponse(context.Background(), queries, item)
 		resp["issue_status"] = issueStatus
 		bus.Publish(events.Event{
 			Type:        protocol.EventInboxNew,
@@ -864,10 +888,15 @@ func registerNotificationListeners(bus *events.Bus, queries *db.Queries) {
 
 // inboxItemToResponse converts a db.InboxItem into a map suitable for
 // JSON-serializable event payloads (mirrors handler.inboxToResponse fields).
-func inboxItemToResponse(item db.InboxItem) map[string]any {
+func inboxItemToResponse(ctx context.Context, queries *db.Queries, item db.InboxItem) map[string]any {
+	workspaceSlug := ""
+	if ws, err := queries.GetWorkspace(ctx, item.WorkspaceID); err == nil {
+		workspaceSlug = ws.Slug
+	}
 	return map[string]any{
 		"id":             util.UUIDToString(item.ID),
 		"workspace_id":   util.UUIDToString(item.WorkspaceID),
+		"workspace_slug": workspaceSlug,
 		"recipient_type": item.RecipientType,
 		"recipient_id":   util.UUIDToString(item.RecipientID),
 		"type":           item.Type,

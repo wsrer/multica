@@ -71,6 +71,11 @@ vi.mock("../../editor", () => ({
   copyMarkdown: vi.fn(),
   useFileDropZone: () => ({ isDragOver: false, dropZoneProps: {} }),
   useDownloadAttachment: () => vi.fn(),
+  useAttachmentPreview: () => ({
+    tryOpen: vi.fn(() => true),
+    modal: null,
+  }),
+  isPreviewable: () => false,
 }));
 
 vi.mock("./reply-input", () => ({
@@ -167,6 +172,8 @@ describe("CommentCard attachments", () => {
           content_type: "text/markdown",
           size_bytes: 128,
           created_at: "2026-05-07T08:00:00Z",
+          chat_session_id: null,
+          chat_message_id: null,
         },
       ],
     } satisfies TimelineEntry;
@@ -174,7 +181,7 @@ describe("CommentCard attachments", () => {
     renderComment(entry);
 
     const previewButton = screen.getByRole("button", { name: "Preview result.md" });
-    const downloadButton = screen.getByRole("button", { name: "Download result.md" });
+    const downloadButton = screen.getByRole("button", { name: "Download" });
     expect(previewButton.compareDocumentPosition(downloadButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     await user.click(previewButton);

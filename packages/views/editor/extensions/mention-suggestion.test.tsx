@@ -45,6 +45,36 @@ vi.mock("@multica/core/auth", () => ({
   useAuthStore: { getState: () => authState },
 }));
 
+vi.mock("@multica/ui/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children, render }: { children?: ReactNode; render?: ReactNode }) => (
+    <span data-testid="tooltip-trigger">{render ?? children}</span>
+  ),
+  TooltipContent: ({
+    children,
+    align,
+    side,
+    className,
+    positionerClassName,
+  }: {
+    children: ReactNode;
+    align?: string;
+    side?: string;
+    className?: string;
+    positionerClassName?: string;
+  }) => (
+    <div
+      data-testid="tooltip-content"
+      data-align={align}
+      data-side={side}
+      data-class={className}
+      data-positioner-class={positionerClassName}
+    >
+      {children}
+    </div>
+  ),
+}));
+
 import {
   createMentionSuggestion,
   MentionList,
@@ -61,11 +91,17 @@ function fakeQc(data: {
     visibility?: "workspace" | "private";
     owner_id?: string | null;
   }>;
+  squads?: Array<{
+    id: string;
+    name: string;
+    archived_at: string | null;
+  }>;
   issues?: Array<{ id: string; identifier: string; title: string; status: string }>;
 }): QueryClient {
   const map = new Map<string, unknown>();
   map.set(JSON.stringify(workspaceKeys.members("ws-1")), data.members ?? []);
   map.set(JSON.stringify(workspaceKeys.agents("ws-1")), data.agents ?? []);
+  map.set(JSON.stringify(workspaceKeys.squads("ws-1")), data.squads ?? []);
   const byStatus: ListIssuesCache["byStatus"] = {};
   for (const status of PAGINATED_STATUSES) {
     const bucket = (data.issues ?? []).filter((i) => i.status === status);
@@ -131,7 +167,8 @@ describe("createMentionSuggestion", () => {
     await waitFor(() => {
       expect(screen.getByText("MUL-1007")).toBeInTheDocument();
     });
-    expect(screen.getByText("多 Agent 协作探索")).toBeInTheDocument();
+    expect(screen.getAllByText("多 Agent 协作探索")).toHaveLength(2);
+    expect(screen.getByTestId("tooltip-content")).toHaveTextContent("多 Agent 协作探索");
     expect(searchIssuesMock).toHaveBeenCalledWith(
       expect.objectContaining({
         q: "协作",
@@ -139,6 +176,120 @@ describe("createMentionSuggestion", () => {
         include_closed: true,
       }),
     );
+  });
+
+  it("shows the full issue title in a tooltip for issue suggestion rows", async () => {
+    searchIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          id: "i-1008",
+          identifier: "MUL-1008",
+          title: "A long issue title for the mention suggestion panel",
+          status: "todo",
+        },
+      ],
+      total: 1,
+    });
+
+    render(
+      <I18nWrapper>
+        <MentionList items={[]} query="long" command={vi.fn()} />
+      </I18nWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("MUL-1008")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("tooltip-content")).toHaveTextContent(
+      "A long issue title for the mention suggestion panel",
+    );
+  });
+
+  it("anchors the issue suggestion tooltip to the start of the title column", async () => {
+    searchIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          id: "i-1010",
+          identifier: "MUL-1010",
+          title: "Tooltip should stay aligned with the issue title",
+          status: "todo",
+        },
+      ],
+      total: 1,
+    });
+
+    render(
+      <I18nWrapper>
+        <MentionList items={[]} query="aligned" command={vi.fn()} />
+      </I18nWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("MUL-1010")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("tooltip-content")).toHaveAttribute("data-align", "start");
+  });
+
+  it("renders the issue suggestion tooltip above the suggestion popup layer", async () => {
+    searchIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          id: "i-1011",
+          identifier: "MUL-1011",
+          title: "Tooltip should sit above the suggestion popup",
+          status: "todo",
+        },
+      ],
+      total: 1,
+    });
+
+    render(
+      <I18nWrapper>
+        <MentionList items={[]} query="above" command={vi.fn()} />
+      </I18nWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("MUL-1011")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("tooltip-content")).toHaveAttribute(
+      "data-positioner-class",
+      expect.stringContaining("z-[70]"),
+    );
+  });
+
+  it("keeps the tooltip trigger scoped to the issue title text", async () => {
+    searchIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          id: "i-1009",
+          identifier: "MUL-1009",
+          title: "Title-only tooltip trigger",
+          status: "done",
+        },
+      ],
+      total: 1,
+    });
+
+    render(
+      <I18nWrapper>
+        <MentionList items={[]} query="trigger" command={vi.fn()} />
+      </I18nWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("MUL-1009")).toBeInTheDocument();
+    });
+
+    const titleInTrigger = screen.getByTestId("tooltip-trigger").querySelector(
+      ".text-muted-foreground",
+    ) as HTMLElement | null;
+
+    expect(screen.getByTestId("tooltip-trigger")).toContainElement(titleInTrigger);
+    expect(titleInTrigger).toHaveTextContent("Title-only tooltip trigger");
   });
 
   it("does not call searchIssues for an empty query", () => {
@@ -243,5 +394,91 @@ describe("createMentionSuggestion", () => {
 
     const items = result as MentionItem[];
     expect(items.some((i) => i.type === "issue" && i.id === "i1")).toBe(true);
+  });
+
+  it("includes all non-archived squads in the mention list", () => {
+    const qc = fakeQc({
+      members: [{ user_id: "u1", name: "Alice", role: "member" }],
+      squads: [
+        { id: "s1", name: "Jiayuan's Coding Team", archived_at: null },
+        { id: "s2", name: "独立团", archived_at: null },
+        { id: "s3", name: "Archived Squad", archived_at: "2026-01-01T00:00:00Z" },
+      ],
+    });
+    searchIssuesMock.mockReturnValue(new Promise(() => {}));
+
+    const config = createMentionSuggestion(qc);
+    const result = config.items!({ query: "", editor: {} as never });
+
+    const items = result as MentionItem[];
+    expect(items.filter((i) => i.type === "squad")).toHaveLength(2);
+    expect(items.some((i) => i.type === "squad" && i.label === "Jiayuan's Coding Team")).toBe(true);
+    expect(items.some((i) => i.type === "squad" && i.label === "独立团")).toBe(true);
+    expect(items.some((i) => i.type === "squad" && i.label === "Archived Squad")).toBe(false);
+  });
+
+  it("returns no squads when the squads cache is empty (not yet fetched)", () => {
+    const qc = fakeQc({
+      members: [{ user_id: "u1", name: "Alice", role: "member" }],
+      // squads not provided — simulates cache miss
+    });
+    searchIssuesMock.mockReturnValue(new Promise(() => {}));
+
+    const config = createMentionSuggestion(qc);
+    const result = config.items!({ query: "", editor: {} as never });
+
+    const items = result as MentionItem[];
+    expect(items.filter((i) => i.type === "squad")).toHaveLength(0);
+  });
+
+  it("matches Chinese names by full pinyin", () => {
+    const qc = fakeQc({
+      members: [
+        { user_id: "u1", name: "Alice", role: "member" },
+        { user_id: "u2", name: "李云龙", role: "member" },
+      ],
+    });
+    searchIssuesMock.mockReturnValue(new Promise(() => {}));
+
+    const config = createMentionSuggestion(qc);
+    const result = config.items!({ query: "liyunlong", editor: {} as never });
+
+    const items = result as MentionItem[];
+    expect(items.some((i) => i.type === "member" && i.label === "李云龙")).toBe(true);
+    expect(items.some((i) => i.type === "member" && i.label === "Alice")).toBe(false);
+  });
+
+  it("matches Chinese names by pinyin initials", () => {
+    const qc = fakeQc({
+      members: [
+        { user_id: "u1", name: "Alice", role: "member" },
+        { user_id: "u2", name: "李云龙", role: "member" },
+        { user_id: "u3", name: "张大彪", role: "member" },
+      ],
+    });
+    searchIssuesMock.mockReturnValue(new Promise(() => {}));
+
+    const config = createMentionSuggestion(qc);
+    const result = config.items!({ query: "lyl", editor: {} as never });
+
+    const items = result as MentionItem[];
+    expect(items.some((i) => i.type === "member" && i.label === "李云龙")).toBe(true);
+    expect(items.some((i) => i.type === "member" && i.label === "张大彪")).toBe(false);
+  });
+
+  it("matches Chinese agent names by pinyin", () => {
+    const qc = fakeQc({
+      members: [{ user_id: "u1", name: "Alice", role: "member" }],
+      agents: [
+        { id: "a1", name: "魏和尚", archived_at: null, visibility: "workspace", owner_id: null },
+      ],
+    });
+    searchIssuesMock.mockReturnValue(new Promise(() => {}));
+
+    const config = createMentionSuggestion(qc);
+    const result = config.items!({ query: "whs", editor: {} as never });
+
+    const items = result as MentionItem[];
+    expect(items.some((i) => i.type === "agent" && i.label === "魏和尚")).toBe(true);
   });
 });
