@@ -20,6 +20,10 @@ vi.mock("@multica/core/hooks", () => ({
   useCurrentWorkspace: () => ({ id: "ws-1", name: "Test WS", slug: "test" }),
 }));
 
+vi.mock("../actor-avatar", () => ({
+  ActorAvatar: () => <span data-testid="actor-avatar" />,
+}));
+
 const TEST_RESOURCES = {
   en: {
     common: enCommon,
