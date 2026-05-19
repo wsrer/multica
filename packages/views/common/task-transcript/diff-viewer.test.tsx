@@ -115,4 +115,28 @@ describe("DiffViewer", () => {
     expect(screen.getByText("--- src/new-file.ts")).toBeInTheDocument();
     expect(screen.getByText("(new file, 42 bytes)")).toBeInTheDocument();
   });
+
+  it("does not emit a phantom deletion line for new-file writes", () => {
+    render(
+      <DiffViewer newText={"hello\nworld"} filePath="src/greeting.ts" />,
+      { wrapper: I18nWrapper },
+    );
+
+    expect(screen.getByText("+hello")).toBeInTheDocument();
+    expect(screen.getByText("+world")).toBeInTheDocument();
+    expect(screen.queryByText("-")).not.toBeInTheDocument();
+    expect(screen.getByText("@@ -0,0 +1,2 @@")).toBeInTheDocument();
+  });
+
+  it("does not emit a phantom addition line for full-file deletions", () => {
+    render(
+      <DiffViewer oldText={"hello\nworld"} filePath="src/greeting.ts" />,
+      { wrapper: I18nWrapper },
+    );
+
+    expect(screen.getByText("-hello")).toBeInTheDocument();
+    expect(screen.getByText("-world")).toBeInTheDocument();
+    expect(screen.queryByText("+")).not.toBeInTheDocument();
+    expect(screen.getByText("@@ -1,2 +0,0 @@")).toBeInTheDocument();
+  });
 });

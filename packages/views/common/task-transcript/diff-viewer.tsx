@@ -62,13 +62,17 @@ function parseUnifiedDiff(text: string): DiffLine[] {
 }
 
 function buildDiffFromOldNew(oldText: string, newText: string, filePath?: string): string {
-  const oldLines = oldText.split("\n");
-  const newLines = newText.split("\n");
+  const hasOld = oldText.length > 0;
+  const hasNew = newText.length > 0;
+  const oldLines = hasOld ? oldText.split("\n") : [];
+  const newLines = hasNew ? newText.split("\n") : [];
+  const oldStart = oldLines.length > 0 ? 1 : 0;
+  const newStart = newLines.length > 0 ? 1 : 0;
   const path = filePath ?? "file";
   const lines: string[] = [
     `--- ${path}`,
     `+++ ${path}`,
-    `@@ -1,${oldLines.length} +1,${newLines.length} @@`,
+    `@@ -${oldStart},${oldLines.length} +${newStart},${newLines.length} @@`,
     ...oldLines.map((line) => `-${line}`),
     ...newLines.map((line) => `+${line}`),
   ];
@@ -230,11 +234,11 @@ export function DiffViewer({
                   key={i}
                   className={
                     line.type === "add"
-                      ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
+                      ? "bg-success/10 text-success"
                       : line.type === "del"
-                        ? "bg-red-500/10 text-red-600 dark:bg-red-500/20 dark:text-red-400"
+                        ? "bg-destructive/10 text-destructive"
                         : line.type === "hunk" || line.type === "file"
-                          ? "text-blue-500 dark:text-blue-400"
+                          ? "text-info"
                           : "text-muted-foreground"
                   }
                 >
@@ -249,7 +253,7 @@ export function DiffViewer({
                   if (row.type === "file" || row.type === "hunk") {
                     return (
                       <tr key={i}>
-                        <td colSpan={2} className="px-1 py-0.5 text-blue-500 dark:text-blue-400">
+                        <td colSpan={2} className="px-1 py-0.5 text-info">
                           {row.left}
                         </td>
                       </tr>
@@ -261,7 +265,7 @@ export function DiffViewer({
                       <td
                         className={
                           row.type === "del" || row.type === "pair"
-                            ? "w-1/2 bg-red-500/10 px-1 py-0.5 text-red-600 dark:bg-red-500/20 dark:text-red-400"
+                            ? "w-1/2 bg-destructive/10 px-1 py-0.5 text-destructive"
                             : "w-1/2 px-1 py-0.5 text-muted-foreground"
                         }
                       >
@@ -270,7 +274,7 @@ export function DiffViewer({
                       <td
                         className={
                           row.type === "add" || row.type === "pair"
-                            ? "w-1/2 bg-emerald-500/10 px-1 py-0.5 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
+                            ? "w-1/2 bg-success/10 px-1 py-0.5 text-success"
                             : "w-1/2 px-1 py-0.5 text-muted-foreground"
                         }
                       >
